@@ -1,0 +1,399 @@
+{% extends 'base.html' %}
+{% block title %}{{ exam.title }} — In Progress{% endblock %}
+{% block content %}
+
+<div id="fullscreen-gate" class="lockdown-overlay">
+  <div class="lockdown-box">
+    <h2 style="margin-top:0;">Ready to begin?</h2>
+    <p>This exam works best in fullscreen mode — it helps prevent accidental exits.</p>
+    <button type="button" id="enter-fullscreen-btn" class="btn btn-accent">Enter Fullscreen &amp; Begin</button>
+    <p class="helptext" style="margin-top:14px;">
+      <a href="#" id="skip-fullscreen-link">Continue without fullscreen</a>
+      (your timer has already started either way)
+    </p>
+  </div>
+</div>
+
+<div id="fullscreen-return-gate" class="lockdown-overlay" style="display:none;">
+  <div class="lockdown-box" style="border-color:#c0392b;">
+    <h2 style="margin-top:0; color:#a5322a;">⚠ You left fullscreen mode</h2>
+    <p>This has been recorded. Click below to return and continue your exam.</p>
+    <button type="button" id="return-fullscreen-btn" class="btn btn-danger">Return to Fullscreen</button>
+  </div>
+</div>
+
+<div class="card" id="tab-warning-banner" style="display:none; background:#fbe7e7; border-color:#c0392b;">
+  <strong>⚠ Tab switching detected.</strong> Leaving this exam tab is being logged. Please stay on this page until you submit.
+</div>
+
+<div class="card">
+  <h2 style="margin:0;">{{ exam.title }}</h2>
+  <p class="muted" style="margin:4px 0 0;">{{ exam.subject.code }} · {{ questions|length }} item(s)</p>
+  {% if exam.instructions %}<p style="margin-top:10px;">{{ exam.instructions|linebreaksbr }}</p>{% endif %}
+</div>
+
+<form method="post" action="{% url 'results:submit_exam' exam.id %}" id="exam-form">
+  {% csrf_token %}
+
+  <div class="exam-shell">
+    <div class="exam-main">
+      <div class="card">
+        <div class="progress-summary" id="progress-summary"></div>
+
+        {% for q in questions %}
+        <div class="question-block {% if forloop.first %}active{% endif %}" data-index="{{ forloop.counter0 }}" data-qid="{{ q.id }}">
+          <span class="qtype-tag">{{ q.get_question_type_display }} · {{ q.points }} pt{{ q.points|pluralize }}</span>
+          <div class="question-meta">Item {{ forloop.counter }} of {{ questions|length }}</div>
+          <h3 style="margin-top:4px;">{{ q.question_text|linebreaksbr }}</h3>
+
+          {% if q.question_type == 'MCQ' or q.question_type == 'TF' %}
+            {% for choice in q.shuffled_choices %}
+              <label class="choice-row">
+                <input type="radio" name="question_{{ q.id }}" value="{{ choice.id }}"
+                       class="answer-input" data-qindex="{{ forloop.parentloop.counter0 }}"
+                       {% if choice.id == q.saved_choice_id %}checked{% endif %}>
+                {{ choice.choice_text }}
+              </label>
+            {% endfor %}
+          {% elif q.question_type == 'ENUM' %}
+            <p class="helptext">List your answers, one per line (expecting about {{ q.expected_answer_count }} item{{ q.expected_answer_count|pluralize }}).</p>
+            <textarea name="question_{{ q.id }}" rows="5" class="answer-input" data-qindex="{{ forloop.counter0 }}">{{ q.saved_text }}</textarea>
+          {% elif q.question_type == 'IDENT' %}
+            <input type="text" name="question_{{ q.id }}" class="answer-input" data-qindex="{{ forloop.counter0 }}" value="{{ q.saved_text }}">
+          {% elif q.question_type == 'MATCH' %}
+            <p class="helptext">Match each Column A item with its Column B answer.</p>
+            <table style="margin-top:8px;">
+              <thead><tr><th>Column A</th><th>Column B</th></tr></thead>
+              <tbody>
+              {% for pair, saved_value in q.matching_rows %}
+                <tr>
+                  <td>{{ pair.left_text }}</td>
+                  <td>
+                    <select name="question_{{ q.id }}_pair_{{ pair.id }}" class="answer-input" data-qindex="{{ forloop.parentloop.counter0 }}">
+                      <option value="">-- Select --</option>
+                      {% for letter, text in q.column_b_options %}
+                        <option value="{{ text }}" {% if text == saved_value %}selected{% endif %}>{{ letter }}. {{ text }}</option>
+                      {% endfor %}
+                    </select>
+                  </td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <p class="helptext">Write your case analysis / explanation below.</p>
+            <textarea name="question_{{ q.id }}" rows="8" class="answer-input" data-qindex="{{ forloop.counter0 }}">{{ q.saved_text }}</textarea>
+          {% endif %}
+        </div>
+        {% endfor %}
+
+        <div class="nav-controls">
+          <button type="button" class="btn btn-secondary" id="prev-btn">&larr; Previous</button>
+          <button type="button" class="btn btn-accent" id="next-btn">Next &rarr;</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="exam-sidebar">
+      <div class="timer-box" id="timer-box">
+        <div class="label">TIME REMAINING</div>
+        <div class="clock" id="timer-clock">--:--</div>
+        <div class="helptext" id="autosave-status" style="color:#e8f0fb; margin-top:6px;">Autosave on</div>
+      </div>
+
+      <div class="card" style="padding:14px;">
+        <h3 style="margin-top:0; font-size:0.95rem;">Question Navigator</h3>
+        <p class="helptext" style="margin-top:-4px;">Hover to preview, click any number to jump — skip and come back anytime.</p>
+        <div class="nav-grid" id="nav-grid">
+          {% for q in questions %}
+            <button type="button" class="nav-btn" data-index="{{ forloop.counter0 }}" data-tip="Item {{ forloop.counter }}">{{ forloop.counter }}</button>
+          {% endfor %}
+        </div>
+        <button type="submit" class="btn btn-accent" style="width:100%; margin-top:16px;">Submit Exam</button>
+      </div>
+    </div>
+  </div>
+</form>
+
+<script>
+(function() {
+  // ---------------- Element lookups ----------------
+  const questionBlocks = Array.from(document.querySelectorAll('.question-block'));
+  const navButtons = Array.from(document.querySelectorAll('.nav-btn'));
+  const prevBtn = document.getElementById('prev-btn');
+  const nextBtn = document.getElementById('next-btn');
+  const progressSummary = document.getElementById('progress-summary');
+  const examForm = document.getElementById('exam-form');
+  const clockEl = document.getElementById('timer-clock');
+  const timerBox = document.getElementById('timer-box');
+  const autosaveStatusEl = document.getElementById('autosave-status');
+  const tabWarningBanner = document.getElementById('tab-warning-banner');
+  const csrfToken = examForm.querySelector('input[name=csrfmiddlewaretoken]').value;
+
+  // ---------------- Shared state ----------------
+  let currentIndex = {{ resume_index }};
+  let suppressBlurLogging = false;
+  let remaining = {{ remaining_seconds }};
+  let warningTimeout = null;
+  let autosaveDebounceTimer = null;
+  let timerInterval = null;
+  let autosaveInterval = null;
+
+  const autosaveUrl = "{% url 'results:autosave_exam' exam.id %}";
+  const logTabSwitchUrl = "{% url 'results:log_tab_switch' exam.id %}";
+
+  // ---------------- Fullscreen enforcement ----------------
+  // NOTE: a webpage cannot block OS-level shortcuts like Alt+Tab or the
+  // Windows key - those never reach the browser at all. What we CAN do is
+  // encourage fullscreen mode (harder to casually click away from) and
+  // detect + log whenever the student leaves it, alongside the tab-switch
+  // detection below. For a stronger lockdown, pair this with launching the
+  // browser in kiosk mode on the lab PCs (see deployment docs).
+  const fullscreenGate = document.getElementById('fullscreen-gate');
+  const fullscreenReturnGate = document.getElementById('fullscreen-return-gate');
+  let fullscreenWasRequested = false;
+
+  function isFullscreen() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
+  }
+
+  function requestFullscreen() {
+    const el = document.documentElement;
+    const request = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+    if (!request) return Promise.reject(new Error('Fullscreen not supported'));
+    return request.call(el);
+  }
+
+  document.getElementById('enter-fullscreen-btn').addEventListener('click', () => {
+    requestFullscreen()
+      .then(() => { fullscreenWasRequested = true; })
+      .finally(() => { fullscreenGate.style.display = 'none'; });
+  });
+
+  document.getElementById('skip-fullscreen-link').addEventListener('click', (e) => {
+    e.preventDefault();
+    fullscreenGate.style.display = 'none';
+  });
+
+  document.getElementById('return-fullscreen-btn').addEventListener('click', () => {
+    requestFullscreen()
+      .then(() => { fullscreenReturnGate.style.display = 'none'; })
+      .catch(() => { /* stays visible until they succeed */ });
+  });
+
+  function handleFullscreenChange() {
+    if (!fullscreenWasRequested || suppressBlurLogging || examForm.dataset.autoSubmitted) return;
+    if (isFullscreen()) {
+      fullscreenReturnGate.style.display = 'none';
+    } else {
+      fullscreenReturnGate.style.display = 'flex';
+      reportTabSwitch();
+    }
+  }
+  document.addEventListener('fullscreenchange', handleFullscreenChange);
+  document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+  document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+
+  // ---------------- Deterrents: right-click, copy, devtools shortcuts ----------------
+  // These are deterrents only, not hard security - a determined user can
+  // still bypass them (e.g. browser devtools can be opened other ways).
+  // They exist to stop casual copying/screenshotting, same spirit as the
+  // "can't select the question text" CSS rule above.
+  document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  document.addEventListener('keydown', (e) => {
+    const key = e.key;
+    if (key === 'F12') { e.preventDefault(); return; }
+    if ((e.ctrlKey || e.metaKey) && ['u', 'p', 's'].includes(key.toLowerCase())) {
+      e.preventDefault();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i', 'j', 'c'].includes(key.toLowerCase())) {
+      e.preventDefault();
+    }
+  });
+
+  // ---------------- Navigation ----------------
+  function showQuestion(index) {
+    if (index < 0 || index >= questionBlocks.length) return;
+    currentIndex = index;
+    questionBlocks.forEach((block, i) => block.classList.toggle('active', i === index));
+    navButtons.forEach((btn, i) => btn.classList.toggle('current', i === index));
+    prevBtn.disabled = (index === 0);
+    nextBtn.textContent = (index === questionBlocks.length - 1) ? 'Review First Item' : 'Next →';
+    scheduleAutosave();
+  }
+
+  function isAnswered(qindex) {
+    const block = questionBlocks[qindex];
+    const inputs = block.querySelectorAll('.answer-input');
+    for (const input of inputs) {
+      if (input.type === 'radio') {
+        if (input.checked) return true;
+      } else if (input.value && input.value.trim() !== '') {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function refreshAnsweredStates() {
+    let answeredCount = 0;
+    navButtons.forEach((btn, i) => {
+      const answered = isAnswered(i);
+      btn.classList.toggle('answered', answered);
+      btn.dataset.tip = `Item ${i + 1}: ${answered ? 'Answered' : 'Not answered'}`;
+      if (answered) answeredCount++;
+    });
+    progressSummary.textContent = `${answeredCount} of ${navButtons.length} item(s) answered`;
+  }
+
+  navButtons.forEach((btn, i) => {
+    btn.addEventListener('click', () => showQuestion(i));
+  });
+
+  prevBtn.addEventListener('click', () => showQuestion(currentIndex - 1));
+  nextBtn.addEventListener('click', () => {
+    if (currentIndex === questionBlocks.length - 1) {
+      showQuestion(0);
+    } else {
+      showQuestion(currentIndex + 1);
+    }
+  });
+
+  document.querySelectorAll('.answer-input').forEach(input => {
+    input.addEventListener('change', () => { refreshAnsweredStates(); scheduleAutosave(); });
+    input.addEventListener('keyup', () => { refreshAnsweredStates(); scheduleAutosave(); });
+  });
+
+  // ---------------- Timer ----------------
+  function formatTime(totalSeconds) {
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    if (h > 0) {
+      return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    }
+    return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+
+  function tick() {
+    clockEl.textContent = formatTime(remaining);
+    if (remaining <= 60) {
+      timerBox.classList.add('warning');
+    }
+    if (remaining <= 0) {
+      clearInterval(timerInterval);
+      clearInterval(autosaveInterval);
+      examForm.dataset.autoSubmitted = 'true';
+      suppressBlurLogging = true;
+      alert('Time is up! Your exam will now be submitted automatically.');
+      examForm.submit();
+      return;
+    }
+    remaining -= 1;
+  }
+
+  // ---------------- Tab switching detection ----------------
+  // Uses visibilitychange only (not the "blur" event). blur fires for lots
+  // of benign, non-cheating interactions - clicking a browser popup, an
+  // autofill dropdown, a print dialog, even opening dev tools - none of
+  // which mean the student actually left this page. visibilitychange only
+  // flips when the tab itself becomes genuinely hidden (switched away,
+  // minimized, or another app takes the foreground), which is a much more
+  // reliable signal that something worth logging actually happened.
+  function reportTabSwitch() {
+    if (suppressBlurLogging) return;
+
+    fetch(logTabSwitchUrl, {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': csrfToken,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    }).catch(() => { /* best-effort; don't interrupt the student's exam */ });
+
+    tabWarningBanner.style.display = 'block';
+    window.scrollTo({top: 0, behavior: 'instant'});
+    clearTimeout(warningTimeout);
+    warningTimeout = setTimeout(() => { tabWarningBanner.style.display = 'none'; }, 8000);
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) reportTabSwitch();
+  });
+
+  // Submitting the exam (manually or via the timer) legitimately exits
+  // fullscreen and can blur the window as the browser navigates to the
+  // result page - that's not a violation. Once the student confirms submit,
+  // suppression stays on for the rest of this page's lifetime (there's no
+  // legitimate reason to turn it back off - the page is about to navigate
+  // away regardless of confirm/cancel timing).
+  examForm.addEventListener('submit', function (e) {
+    if (!examForm.dataset.autoSubmitted) {
+      suppressBlurLogging = true;
+      const confirmed = confirm('Submit your exam now? You will not be able to change your answers after this.');
+      if (!confirmed) {
+        suppressBlurLogging = false;
+        e.preventDefault();
+        return;
+      }
+      // confirmed: mark as submitting so both the fullscreen-exit overlay
+      // and tab-switch logging stay suppressed for the rest of this page's
+      // lifetime, regardless of how long the actual navigation takes.
+      examForm.dataset.autoSubmitted = 'true';
+    }
+  });
+
+  // ---------------- Autosave ----------------
+  // Protects against a sudden power/network interruption: answers (and the
+  // student's current item position) are continuously saved to the server,
+  // not just at final submission. Runs on a short debounce after any answer
+  // edit or navigation, plus a periodic heartbeat as a fallback.
+  function performAutosave() {
+    if (examForm.dataset.autoSubmitted) return; // exam is ending, no need
+
+    const formData = new FormData(examForm);
+    formData.set('current_index', String(currentIndex));
+
+    autosaveStatusEl.textContent = 'Saving…';
+
+    fetch(autosaveUrl, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrfToken },
+      body: formData,
+    })
+      .then(response => response.json())
+      .then(data => {
+        if (data.status === 'ok') {
+          const now = new Date();
+          const hh = String(now.getHours()).padStart(2, '0');
+          const mm = String(now.getMinutes()).padStart(2, '0');
+          const ss = String(now.getSeconds()).padStart(2, '0');
+          autosaveStatusEl.textContent = `Saved ${hh}:${mm}:${ss}`;
+        } else if (data.status === 'time_up' || data.status === 'already_submitted') {
+          window.location.reload();
+        } else {
+          autosaveStatusEl.textContent = 'Autosave paused - reconnecting…';
+        }
+      })
+      .catch(() => {
+        autosaveStatusEl.textContent = 'Offline - retrying…';
+      });
+  }
+
+  function scheduleAutosave() {
+    clearTimeout(autosaveDebounceTimer);
+    autosaveDebounceTimer = setTimeout(performAutosave, 1200);
+  }
+
+  // ---------------- Kick everything off ----------------
+  showQuestion(currentIndex);
+  refreshAnsweredStates();
+
+  tick();
+  timerInterval = setInterval(tick, 1000);
+  autosaveInterval = setInterval(performAutosave, 20000);
+})();
+</script>
+{% endblock %}

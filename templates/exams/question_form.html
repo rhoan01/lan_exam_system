@@ -1,0 +1,113 @@
+{% extends 'base.html' %}
+{% block title %}Add Question{% endblock %}
+{% block content %}
+<div class="card" style="max-width:680px;">
+  <h2>Add Question — {{ exam.title }}</h2>
+  <p class="muted">{{ exam.total_items }} / 100 items so far.</p>
+
+  <form method="post" novalidate id="question-form">
+    {% csrf_token %}
+
+    <p>
+      <label for="{{ form.question_type.id_for_label }}">Question Type</label>
+      {{ form.question_type }}
+    </p>
+    <p>
+      <label for="{{ form.question_text.id_for_label }}">Question Text</label>
+      {{ form.question_text }}
+      {% for error in form.question_text.errors %}<div class="helptext" style="color:#a5322a;">{{ error }}</div>{% endfor %}
+    </p>
+    <p>
+      <label for="{{ form.points.id_for_label }}">Points</label>
+      {{ form.points }}
+    </p>
+    <p id="enum-count-field">
+      <label for="{{ form.expected_answer_count.id_for_label }}">Expected number of answers (Enumeration only)</label>
+      {{ form.expected_answer_count }}
+    </p>
+
+    <div id="mcq-section" style="border-top:1px solid #dbe1e8; padding-top:14px; margin-top:10px;">
+      <h3 style="margin-top:0;">Answer Choices</h3>
+      <p class="helptext">Check the box next to the correct choice.</p>
+      {{ choice_formset.management_form }}
+      {% for cform in choice_formset %}
+        <div class="choice-row">
+          {{ cform.choice_text }}
+          <label style="display:flex; align-items:center; gap:4px; margin:0; font-weight:400; white-space:nowrap;">
+            {{ cform.is_correct }} Correct
+          </label>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div id="tf-section" style="border-top:1px solid #dbe1e8; padding-top:14px; margin-top:10px;">
+      <h3 style="margin-top:0;">Correct Answer</h3>
+      <p class="helptext">Select whether the statement is True or False.</p>
+      <label class="choice-row">
+        <input type="radio" name="tf_correct_answer" value="True"> True
+      </label>
+      <label class="choice-row">
+        <input type="radio" name="tf_correct_answer" value="False"> False
+      </label>
+    </div>
+
+    <div id="match-section" style="border-top:1px solid #dbe1e8; padding-top:14px; margin-top:10px;">
+      <h3 style="margin-top:0;">Column A / Column B Pairs</h3>
+      <p class="helptext">Each row is one Column A item and its correct Column B answer. Need at least 2 complete rows. Column B is shown to students in random order.</p>
+      {{ pair_formset.management_form }}
+      {% for pform in pair_formset %}
+        <div class="choice-row" style="gap:8px;">
+          <span class="muted" style="white-space:nowrap;">A:</span>
+          {{ pform.left_text }}
+          <span class="muted" style="white-space:nowrap;">B:</span>
+          {{ pform.right_text }}
+        </div>
+      {% endfor %}
+      <h3 style="margin-top:18px;">Distractor Choices (optional)</h3>
+      <p class="helptext">Extra Column B options with no correct match, one per line.</p>
+      {{ distractor_form.distractors_text }}
+    </div>
+
+    <div id="key-section" style="border-top:1px solid #dbe1e8; padding-top:14px; margin-top:10px;">
+      <h3 style="margin-top:0;">Answer Key</h3>
+      <p class="helptext" id="key-help">Enter the accepted answer(s), one per line.</p>
+      {{ key_form.correct_answers }}
+    </div>
+
+    <div style="margin-top:18px;">
+      <button type="submit" class="btn btn-accent">Save Question</button>
+      <a href="{% url 'exams:exam_detail' exam.id %}" class="btn btn-secondary">Done Adding Questions</a>
+    </div>
+  </form>
+</div>
+
+<script>
+  const typeSelect = document.getElementById('{{ form.question_type.id_for_label }}');
+  const mcqSection = document.getElementById('mcq-section');
+  const tfSection = document.getElementById('tf-section');
+  const matchSection = document.getElementById('match-section');
+  const keySection = document.getElementById('key-section');
+  const enumCountField = document.getElementById('enum-count-field');
+  const keyHelp = document.getElementById('key-help');
+
+  function updateSections() {
+    const type = typeSelect.value;
+    mcqSection.style.display = (type === 'MCQ') ? 'block' : 'none';
+    tfSection.style.display = (type === 'TF') ? 'block' : 'none';
+    matchSection.style.display = (type === 'MATCH') ? 'block' : 'none';
+    keySection.style.display = (type === 'MCQ' || type === 'TF' || type === 'MATCH') ? 'none' : 'block';
+    enumCountField.style.display = (type === 'ENUM') ? 'block' : 'none';
+
+    if (type === 'IDENT') {
+      keyHelp.textContent = 'Enter the accepted answer(s), one per line (any line matching counts as correct).';
+    } else if (type === 'ENUM') {
+      keyHelp.textContent = 'Enter each expected answer on its own line.';
+    } else if (type === 'CASE') {
+      keyHelp.textContent = 'Enter key concepts / keywords (one per line) the student\'s case analysis answer should mention. Used for auto-grading.';
+    }
+  }
+
+  typeSelect.addEventListener('change', updateSections);
+  updateSections();
+</script>
+{% endblock %}

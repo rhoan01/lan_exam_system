@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% block title %}{{ attempt.student.get_full_name }} — {{ attempt.exam.title }}{% endblock %}
+{% block content %}
+<div class="card">
+  <h2 style="margin:0;">{{ attempt.student.get_full_name }}</h2>
+  <p class="muted" style="margin:4px 0 0;">
+    {{ attempt.student.student_profile.id_number }} ·
+    {{ attempt.student.student_profile.course }} ·
+    {{ attempt.student.student_profile.year_level }} ·
+    Section {{ attempt.student.student_profile.section }}
+  </p>
+  <p class="muted" style="margin:4px 0 0;">{{ attempt.exam.subject.code }} — {{ attempt.exam.title }}</p>
+  <p style="font-size:1.3rem; font-weight:700; margin-top:10px;">
+    {{ attempt.score|floatformat:0 }} / {{ attempt.total_points|floatformat:0 }} ({{ attempt.percentage }}%)
+  </p>
+  <p class="muted" style="margin-top:-6px;">
+    Submitted {{ attempt.submitted_at|date:"M d, Y H:i" }}
+    {% if attempt.tab_switch_count %} · <span class="badge badge-draft">{{ attempt.tab_switch_count }} tab switch{{ attempt.tab_switch_count|pluralize }}</span>{% endif %}
+  </p>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0;">Answers</h3>
+  {% for answer in answers %}
+    <div style="border-bottom:1px solid var(--border); padding:14px 0;">
+      <span class="qtype-tag">{{ answer.question.get_question_type_display }} · {{ answer.question.points }} pt{{ answer.question.points|pluralize }}</span>
+      <div class="question-meta">Item {{ answer.question.order }}</div>
+      <p style="font-weight:600; margin:6px 0;">{{ answer.question.question_text }}</p>
+
+      <table style="margin-top:8px;">
+        <tbody>
+          <tr>
+            <th style="width:140px;">Student's Answer</th>
+            <td>{{ answer.student_display|linebreaksbr }}</td>
+          </tr>
+          <tr>
+            <th>Correct Answer</th>
+            <td>{{ answer.correct_display|linebreaksbr }}</td>
+          </tr>
+          <tr>
+            <th>Points Earned</th>
+            <td>
+              {{ answer.points_earned|floatformat:0 }} / {{ answer.question.points }}
+              {% if answer.needs_manual_review %} <span class="badge badge-draft">for review</span>{% endif %}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  {% empty %}
+    <p class="muted">No answers were recorded for this attempt.</p>
+  {% endfor %}
+
+  <p style="margin-top:16px;"><a href="{% url 'exams:exam_results' attempt.exam.id %}">&larr; Back to Results</a></p>
+</div>
+{% endblock %}

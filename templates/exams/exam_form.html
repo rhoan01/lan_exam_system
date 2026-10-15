@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block title %}{% if exam %}Edit Exam{% else %}New Exam{% endif %}{% endblock %}
+{% block content %}
+<div class="card" style="max-width:560px;">
+  <h2>{% if exam %}Edit Exam — {{ exam.title }}{% else %}New Exam — {{ subject.code }}{% endif %}</h2>
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% for field in form %}
+      <p>
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% if field.help_text %}<div class="helptext">{{ field.help_text }}</div>{% endif %}
+        {% for error in field.errors %}<div class="helptext" style="color:#a5322a;">{{ error }}</div>{% endfor %}
+      </p>
+    {% endfor %}
+    <button type="submit" class="btn btn-accent">{% if exam %}Save Changes{% else %}Create Exam{% endif %}</button>
+    {% if exam %}
+      <a href="{% url 'exams:exam_detail' exam.id %}" class="btn btn-secondary">Cancel</a>
+    {% else %}
+      <a href="{% url 'exams:subject_detail' subject.id %}" class="btn btn-secondary">Cancel</a>
+    {% endif %}
+  </form>
+</div>
+{% endblock %}

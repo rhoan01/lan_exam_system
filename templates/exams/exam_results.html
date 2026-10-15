@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% block title %}Results — {{ exam.title }}{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+    <div>
+      <h2 style="margin:0;">Submitted Results — {{ exam.title }}</h2>
+      <p class="muted" style="margin:4px 0 0;">{{ exam.subject.code }} · {{ exam.total_points }} total points</p>
+    </div>
+    {% if grouped_attempts %}
+      <div style="display:flex; gap:8px;">
+        <a class="btn btn-accent" href="{% url 'exams:export_exam_results_csv' exam.id %}">⬇ CSV Report</a>
+        <a class="btn btn-accent" href="{% url 'exams:export_exam_results_pdf' exam.id %}">⬇ PDF Report</a>
+      </div>
+    {% endif %}
+  </div>
+
+  {% if grouped_attempts %}
+    {% for section, attempts in grouped_attempts %}
+      <h3 style="margin-top:24px; margin-bottom:8px; color:var(--primary-dark);">Section {{ section }}</h3>
+      <table>
+        <thead><tr><th>Student</th><th>ID Number</th><th>Course / Year</th><th>Score</th><th>%</th><th>Tab Switches</th><th>Submitted</th><th></th></tr></thead>
+        <tbody>
+        {% for attempt in attempts %}
+          <tr>
+            <td>{{ attempt.student.get_full_name }}</td>
+            <td>{{ attempt.student.student_profile.id_number }}</td>
+            <td>{{ attempt.student.student_profile.course }} / {{ attempt.student.student_profile.year_level }}</td>
+            <td>{{ attempt.score|floatformat:0 }} / {{ attempt.total_points|floatformat:0 }}</td>
+            <td>{{ attempt.percentage }}%</td>
+            <td>
+              {% if attempt.tab_switch_count %}
+                <span class="badge badge-draft">{{ attempt.tab_switch_count }}</span>
+              {% else %}
+                0
+              {% endif %}
+            </td>
+            <td>{{ attempt.submitted_at|date:"M d, Y H:i" }}</td>
+            <td>
+              <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                <a href="{% url 'exams:view_student_attempt' attempt.id %}" class="btn btn-sm btn-secondary">View Answers</a>
+                <form method="post" action="{% url 'exams:reopen_attempt' attempt.id %}"
+                      onsubmit="return confirm('Reopen this attempt? The student will be able to log back in and continue answering (their score will be cleared until they resubmit).');"
+                      style="display:flex; gap:4px; align-items:center;">
+                  {% csrf_token %}
+                  <input type="number" name="extra_minutes" min="0" placeholder="+min" style="width:60px;" title="Optional: extra minutes to grant when reopening">
+                  <button type="submit" class="btn btn-sm btn-warn">Reopen</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% endfor %}
+  {% else %}
+    <p class="muted">No students have submitted this exam yet.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0;">In-Progress Attempts</h3>
+  <p class="muted" style="margin-top:-6px;">
+    Students currently taking this exam (or who were interrupted mid-exam,
+    e.g. by a power outage) but haven't submitted yet. You can grant extra
+    time to compensate for lost time from an interruption.
+  </p>
+  {% if grouped_in_progress %}
+    {% for section, attempts in grouped_in_progress %}
+      <h3 style="margin-top:20px; margin-bottom:8px; color:var(--primary-dark); font-size:1rem;">Section {{ section }}</h3>
+      <table>
+        <thead><tr><th>Student</th><th>ID Number</th><th>Started</th><th>Extra Time Granted</th><th>Tab Switches</th><th></th></tr></thead>
+        <tbody>
+        {% for attempt in attempts %}
+          <tr>
+            <td>{{ attempt.student.get_full_name }}</td>
+            <td>{{ attempt.student.student_profile.id_number }}</td>
+            <td>{{ attempt.started_at|date:"M d, Y H:i" }}</td>
+            <td>{% if attempt.extra_time_seconds %}{{ attempt.extra_time_minutes }} min{% else %}—{% endif %}</td>
+            <td>
+              {% if attempt.tab_switch_count %}
+                <span class="badge badge-draft">{{ attempt.tab_switch_count }}</span>
+              {% else %}
+                0
+              {% endif %}
+            </td>
+            <td>
+              <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                <form method="post" action="{% url 'exams:grant_extra_time' attempt.id %}" style="display:flex; gap:4px; align-items:center;">
+                  {% csrf_token %}
+                  <input type="number" name="extra_minutes" min="1" placeholder="minutes" style="width:80px;" required>
+                  <button type="submit" class="btn btn-sm btn-accent">Add Time</button>
+                </form>
+                <form method="post" action="{% url 'exams:delete_in_progress_attempt' attempt.id %}"
+                      onsubmit="return confirm('Permanently delete {{ attempt.student.get_full_name }}\'s in-progress attempt and their saved answers? This cannot be undone. They will be able to start a brand new attempt if they access this exam again.');">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% endfor %}
+  {% else %}
+    <p class="muted">No students currently in progress.</p>
+  {% endif %}
+  <p style="margin-top:16px;"><a href="{% url 'exams:exam_detail' exam.id %}">&larr; Back to exam</a></p>
+</div>
+{% endblock %}

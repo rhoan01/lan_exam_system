@@ -1,0 +1,43 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}ITE Department{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/style.css' %}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <div class="navbar">
+    <a href="{% url 'accounts:redirect_after_login' %}" class="brand">ITE Department</a>
+    {% if user.is_authenticated %}
+      {% if user.is_instructor %}
+        <a href="{% url 'exams:instructor_dashboard' %}">Dashboard</a>
+      {% else %}
+        <a href="{% url 'results:student_dashboard' %}">Dashboard</a>
+      {% endif %}
+      <span style="color:#cfe0f5; margin-left:18px;">{{ user.get_full_name|default:user.username }}</span>
+      <form action="{% url 'accounts:logout' %}" method="post" style="display:inline; margin-left:14px;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-secondary">Logout</button>
+      </form>
+    {% else %}
+      <a href="{% url 'accounts:login' %}">Login</a>
+      <a href="{% url 'accounts:register' %}">Register</a>
+    {% endif %}
+  </div>
+
+  <div class="container">
+    {% if messages %}
+      <ul class="messages">
+        {% for message in messages %}
+          <li class="{{ message.tags }}">{{ message }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>

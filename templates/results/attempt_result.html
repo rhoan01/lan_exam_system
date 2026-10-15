@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}Result — {{ attempt.exam.title }}{% endblock %}
+{% block content %}
+<div class="card score-hero">
+  <p class="muted" style="margin:0;">{{ attempt.exam.subject.code }} · {{ attempt.exam.title }}</p>
+  <div class="big">{{ attempt.score|floatformat:0 }} / {{ attempt.total_points|floatformat:0 }}</div>
+  <p style="font-size:1.1rem;">{{ attempt.percentage }}%</p>
+  <p class="muted">Submitted {{ attempt.submitted_at|date:"M d, Y H:i" }}</p>
+</div>
+
+<div class="card" style="text-align:center;">
+  <a href="{% url 'results:student_dashboard' %}" class="btn btn-secondary">&larr; Back to Dashboard</a>
+</div>
+{% endblock %}

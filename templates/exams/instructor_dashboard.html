@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% block title %}Instructor Dashboard{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <h2 style="margin:0;">My Subjects</h2>
+    <a class="btn btn-accent" href="{% url 'exams:subject_create' %}">+ New Subject</a>
+  </div>
+
+  {% if subjects %}
+    <table>
+      <thead><tr><th>Code</th><th>Subject Name</th><th># Exams</th><th></th></tr></thead>
+      <tbody>
+      {% for subject in subjects %}
+        <tr>
+          <td>{{ subject.code }}</td>
+          <td>{{ subject.name }}</td>
+          <td>{{ subject.exams.count }}</td>
+          <td><a href="{% url 'exams:subject_detail' subject.id %}">Manage →</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">You haven't created any subjects yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

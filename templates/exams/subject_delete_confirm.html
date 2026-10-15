@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block title %}Delete Subject{% endblock %}
+{% block content %}
+<div class="card" style="max-width:520px; border-color:#c0392b;">
+  <h2 style="color:#a5322a;">Delete "{{ subject.code }} — {{ subject.name }}"?</h2>
+
+  <p>This will permanently delete:</p>
+  <ul>
+    <li><strong>{{ exam_count }}</strong> exam(s) under this subject, and all of their questions and answer keys</li>
+    <li><strong>{{ attempt_count }}</strong> submitted student attempt(s) and score(s) tied to those exams</li>
+  </ul>
+  <p style="color:#a5322a;"><strong>This cannot be undone.</strong> Make sure you've backed up
+  ({{ "python manage.py backup_data" }}) if you might need this data later.</p>
+
+  <form method="post" action="{% url 'exams:subject_delete' subject.id %}" style="margin-top:18px;">
+    {% csrf_token %}
+    <p>
+      <label for="confirm_name">Type the subject code <strong>{{ subject.code }}</strong> to confirm:</label>
+      <input type="text" id="confirm_name" name="confirm_name" autocomplete="off" required>
+    </p>
+    <button type="submit" class="btn btn-danger">Permanently Delete</button>
+    <a href="{% url 'exams:subject_detail' subject.id %}" class="btn btn-secondary">Cancel</a>
+  </form>
+</div>
+{% endblock %}

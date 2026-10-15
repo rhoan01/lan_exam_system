@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+{% block title %}Edit Question{% endblock %}
+{% block content %}
+<div class="card" style="max-width:680px;">
+  <h2>Edit Question — {{ exam.title }}</h2>
+  <p class="muted">
+    Type: <strong>{{ question.get_question_type_display }}</strong>
+    <span class="helptext">(the question type itself can't be changed after creation — delete and re-add it if you need a different type)</span>
+  </p>
+
+  <form method="post" novalidate id="question-edit-form">
+    {% csrf_token %}
+
+    <p>
+      <label for="{{ form.question_text.id_for_label }}">Question Text</label>
+      {{ form.question_text }}
+      {% for error in form.question_text.errors %}<div class="helptext" style="color:#a5322a;">{{ error }}</div>{% endfor %}
+    </p>
+    <p>
+      <label for="{{ form.points.id_for_label }}">Points</label>
+      {{ form.points }}
+    </p>
+    {% if question.question_type == 'ENUM' %}
+      <p>
+        <label for="{{ form.expected_answer_count.id_for_label }}">Expected number of answers</label>
+        {{ form.expected_answer_count }}
+      </p>
+    {% endif %}
+
+    {% if question.question_type == 'MCQ' %}
+      <div style="border-top:1px solid #dbe1e8; padding-top:14px; margin-top:10px;">
+        <h3 style="margin-top:0;">Answer Choices</h3>
+        <p class="helptext">Check the box next to the correct choice. Check "Delete" on a row to remove that choice, or fill in a blank row to add a new one.</p>
+        {{ choice_formset.management_form }}
+        {% for cform in choice_formset %}
+          <div class="choice-row">
+            {{ cform.id }}
+            {{ cform.choice_text }}
+            <label style="display:flex; align-items:center; gap:4px; margin:0; font-weight:400; white-space:nowrap;">
+              {{ cform.is_correct }} Correct
+            </label>
+            {% if cform.DELETE %}
+              <label style="display:flex; align-items:center; gap:4px; margin:0; font-weight:400; white-space:nowrap; color:#a5322a;">
+                {{ cform.DELETE }} Delete
+              </label>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+
+    {% elif question.question_type == 'TF' %}
+      <div style="border-top:1px solid #dbe1e8; padding-top:14px; margin-top:10px;">
+        <h3 style="margin-top:0;">Correct Answer</h3>
+        <label class="choice-row">
+          <input type="radio" name="tf_correct_answer" value="True" {% if tf_current_answer == 'True' %}checked{% endif %}> True
+        </label>
+        <label class="choice-row">
+          <input type="radio" name="tf_correct_answer" value="False" {% if tf_current_answer == 'False' %}checked{% endif %}> False
+        </label>
+      </div>
+
+    {% elif question.question_type == 'MATCH' %}
+      <div style="border-top:1px solid #dbe1e8; padding-top:14px; margin-top:10px;">
+        <h3 style="margin-top:0;">Column A / Column B Pairs</h3>
+        <p class="helptext">Check "Delete" on a row to remove that pair, or fill in a blank row to add a new one. Need at least 2 complete rows.</p>
+        {{ pair_formset.management_form }}
+        {% for pform in pair_formset %}
+          <div class="choice-row" style="gap:8px;">
+            {{ pform.id }}
+            <span class="muted" style="white-space:nowrap;">A:</span>
+            {{ pform.left_text }}
+            <span class="muted" style="white-space:nowrap;">B:</span>
+            {{ pform.right_text }}
+            {% if pform.DELETE %}
+              <label style="display:flex; align-items:center; gap:4px; margin:0; font-weight:400; white-space:nowrap; color:#a5322a;">
+                {{ pform.DELETE }} Delete
+              </label>
+            {% endif %}
+          </div>
+        {% endfor %}
+        <h3 style="margin-top:18px;">Distractor Choices (optional)</h3>
+        <p class="helptext">Extra Column B options with no correct match, one per line. Editing this replaces the full distractor list.</p>
+        {{ distractor_form.distractors_text }}
+      </div>
+
+    {% else %}
+      <div style="border-top:1px solid #dbe1e8; padding-top:14px; margin-top:10px;">
+        <h3 style="margin-top:0;">Answer Key</h3>
+        <p class="helptext">
+          {% if question.question_type == 'IDENT' %}Enter the accepted answer(s), one per line.
+          {% elif question.question_type == 'ENUM' %}Enter each expected answer on its own line.
+          {% else %}Enter key concepts/keywords (one per line) the answer should mention.{% endif %}
+        </p>
+        {{ key_form.correct_answers }}
+      </div>
+    {% endif %}
+
+    <div style="margin-top:18px;">
+      <button type="submit" class="btn btn-accent">Save Changes</button>
+      <a href="{% url 'exams:exam_detail' exam.id %}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

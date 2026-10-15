@@ -1,0 +1,224 @@
+:root {
+  --primary: #1e4d8b;
+  --primary-dark: #14355e;
+  --accent: #2e8b57;
+  --danger: #c0392b;
+  --warn: #e0a800;
+  --bg: #f4f6f9;
+  --card-bg: #ffffff;
+  --border: #dbe1e8;
+  --text: #232a33;
+  --muted: #6b7785;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', Tahoma, Verdana, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+a { color: var(--primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.navbar {
+  background: var(--primary-dark);
+  color: #fff;
+  padding: 14px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.navbar a { color: #fff; margin-left: 18px; }
+.navbar .brand { font-weight: 700; font-size: 1.2rem; margin-right: auto; color: #fff; }
+.navbar a:hover { text-decoration: underline; }
+
+.container {
+  max-width: 960px;
+  margin: 28px auto;
+  padding: 0 20px;
+}
+
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 22px 26px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+h1, h2, h3 { color: var(--primary-dark); }
+
+.btn {
+  display: inline-block;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  padding: 9px 18px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+.btn:hover { background: var(--primary-dark); color: #fff; text-decoration: none; }
+.btn-accent { background: var(--accent); }
+.btn-danger { background: var(--danger); }
+.btn-warn { background: var(--warn); color: #333; }
+.btn-secondary { background: #6c757d; }
+.btn-sm { padding: 5px 10px; font-size: 0.82rem; }
+
+form p { margin: 10px 0; }
+input, select, textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-family: inherit;
+}
+label { font-weight: 600; display: block; margin-bottom: 4px; }
+
+table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+th { background: #eef2f7; }
+
+.badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.78rem; font-weight: 600; }
+.badge-published { background: #dcf5e2; color: #1c6b34; }
+.badge-draft { background: #fbe7e7; color: #a5322a; }
+
+.messages { list-style: none; padding: 0; margin: 0 0 16px 0; }
+.messages li { padding: 10px 14px; border-radius: 6px; margin-bottom: 8px; }
+.messages .success { background: #dcf5e2; color: #1c6b34; }
+.messages .error { background: #fbe7e7; color: #a5322a; }
+.messages .warning { background: #fff6da; color: #7a5b00; }
+.messages .info { background: #e1eefc; color: #0d4f8b; }
+
+.helptext { color: var(--muted); font-size: 0.82rem; margin-top: -4px; }
+.muted { color: var(--muted); }
+
+/* ---------- Exam-taking layout ---------- */
+.exam-shell { display: flex; gap: 24px; align-items: flex-start; }
+.exam-main { flex: 1; min-width: 0; }
+.exam-sidebar {
+  width: 260px;
+  position: sticky;
+  top: 20px;
+}
+
+.timer-box {
+  background: var(--primary-dark);
+  color: #fff;
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+  margin-bottom: 16px;
+}
+.timer-box .label { font-size: 0.8rem; opacity: 0.85; }
+.timer-box .clock { font-size: 2rem; font-weight: 700; letter-spacing: 1px; }
+.timer-box.warning { background: var(--danger); }
+
+.nav-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+.nav-grid button {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text);
+}
+.nav-grid button.answered { background: var(--accent); color: #fff; border-color: var(--accent); }
+.nav-grid button.current { outline: 3px solid var(--primary); outline-offset: 1px; }
+.nav-grid button:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: 110%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #222;
+  color: #fff;
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  font-weight: 400;
+  border-radius: 4px;
+  white-space: nowrap;
+  z-index: 5;
+}
+
+.question-block { display: none; }
+.question-block.active { display: block; }
+
+.question-meta { color: var(--muted); font-size: 0.85rem; margin-bottom: 6px; }
+.choice-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 8px; cursor: pointer; }
+.choice-row:hover { background: #f0f5fb; }
+.choice-row input { width: auto; }
+
+.qtype-tag {
+  display: inline-block;
+  background: #eef2f7;
+  color: var(--primary-dark);
+  padding: 2px 9px;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.nav-controls { display: flex; justify-content: space-between; margin-top: 18px; }
+
+.progress-summary { font-size: 0.85rem; color: var(--muted); margin-bottom: 10px; }
+
+.score-hero {
+  text-align: center;
+  padding: 30px;
+}
+.score-hero .big { font-size: 3rem; font-weight: 800; color: var(--primary-dark); }
+
+@media (max-width: 800px) {
+  .exam-shell { flex-direction: column; }
+  .exam-sidebar { width: 100%; position: static; }
+  .nav-grid { grid-template-columns: repeat(8, 1fr); }
+}
+
+/* ---------- Exam lockdown overlays (fullscreen prompts) ---------- */
+.lockdown-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 24, 30, 0.92);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.lockdown-box {
+  background: #fff;
+  border-radius: 12px;
+  padding: 36px 40px;
+  max-width: 440px;
+  text-align: center;
+  border: 2px solid var(--border);
+}
+.lockdown-box a { color: var(--primary); }
+
+/* Question text can't be selected/copied, but answer inputs remain fully
+   selectable/editable as normal - this only deters copying the question
+   itself, not the student's own typed work. */
+.question-block h3,
+.question-block .qtype-tag,
+.question-block .helptext,
+.choice-row {
+  user-select: none;
+  -webkit-user-select: none;
+}
+

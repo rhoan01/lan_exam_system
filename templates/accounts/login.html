@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+{% block title %}Login{% endblock %}
+{% block content %}
+
+<div class="card" style="max-width:420px; margin:0 auto;">
+  <h2>Login</h2>
+  <p class="muted">Students: use your ID Number. Instructors: use your assigned username.</p>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+{% for field in form %}
+  <p>
+    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+
+    {% if 'password' in field.name %}
+      <div style="position:relative;">
+        {{ field }}
+
+        <button
+          type="button"
+          onclick="togglePassword('{{ field.id_for_label }}', this)"
+          style="
+            position:absolute;
+            right:10px;
+            top:50%;
+            transform:translateY(-50%);
+            border:none;
+            background:none;
+            cursor:pointer;
+            font-size:18px;
+            padding:4px;
+            color:#666;
+          "
+          aria-label="Show password"
+        >
+          👁️
+        </button>
+      </div>
+    {% else %}
+      {{ field }}
+    {% endif %}
+
+    {% for error in field.errors %}
+      <div class="helptext" style="color:#a5322a;">
+        {{ error }}
+      </div>
+    {% endfor %}
+  </p>
+{% endfor %}
+
+{% if form.non_field_errors %}
+  <div class="helptext" style="color:#a5322a;">
+    {{ form.non_field_errors }}
+  </div>
+{% endif %}
+
+<button type="submit" class="btn btn-accent">
+  Login
+</button>
+
+
+  </form>
+
+  <p style="margin-top:14px;">
+    New student?
+    <a href="{% url 'accounts:register' %}">Register here</a>
+  </p>
+</div>
+
+<script>
+function togglePassword(fieldId, button) {
+    const passwordField = document.getElementById(fieldId);
+
+    if (passwordField.type === "password") {
+        passwordField.type = "text";
+        button.innerHTML = "🙈";
+        button.setAttribute("aria-label", "Hide password");
+    } else {
+        passwordField.type = "password";
+        button.innerHTML = "👁️";
+        button.setAttribute("aria-label", "Show password");
+    }
+}
+</script>
+
+{% endblock %}

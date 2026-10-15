@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+{% block title %}Bulk Import Questions{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Bulk Import Questions — {{ exam.title }}</h2>
+  <p class="muted">You can write your questions in Notepad (or any plain text editor), then paste them below
+  or upload the .txt file. {{ remaining_slots }} more item(s) can be added to this exam.</p>
+
+  <h3 style="margin-top:20px;">Format Guide — two formats are supported</h3>
+
+  <p class="helptext"><strong>Format 1 (all question types):</strong> each question starts with a <code>TYPE:</code> line — <code>MCQ</code>, <code>TF</code>, <code>ENUM</code>, <code>IDENT</code>, <code>CASE</code>, or <code>MATCH</code>.</p>
+  <pre style="background:#f4f6f9; border:1px solid #dbe1e8; border-radius:8px; padding:14px; font-size:0.85rem; overflow-x:auto;">
+TYPE: MCQ
+Q: What is the capital of France?
+POINTS: 2
+A) Paris *
+B) London
+C) Berlin
+D) Madrid
+
+TYPE: TF
+Q: The Philippines has 7,641 islands.
+POINTS: 1
+ANSWER: True
+
+TYPE: IDENT
+Q: What is H2O commonly known as?
+POINTS: 1
+KEY: Water
+KEY: H2O
+
+TYPE: ENUM
+Q: Name 3 branches of government.
+POINTS: 3
+EXPECTED: 3
+KEY: Executive
+KEY: Legislative
+KEY: Judicial
+
+TYPE: MATCH
+Q: Match each term in Column A with the correct definition in Column B.
+POINTS: 3
+PAIR: SaaS = Software as a Service
+PAIR: IaaS = Infrastructure as a Service
+PAIR: PaaS = Platform as a Service
+DISTRACTOR: Network as a Service
+  </pre>
+  <ul class="helptext" style="margin-top:-6px;">
+    <li><strong>POINTS:</strong> optional, defaults to 1.</li>
+    <li><strong>Multiple Choice:</strong> mark the correct choice by ending its line with <code>*</code>.</li>
+    <li><strong>True/False:</strong> just add an <code>ANSWER: True</code> or <code>ANSWER: False</code> line.</li>
+    <li><strong>Enumeration / Identification / Case Analysis:</strong> list accepted answers or keywords with <code>KEY:</code>, one per line.</li>
+    <li><strong>Matching Type:</strong> list each Column A/B pair with <code>PAIR: left = right</code> (needs at least 2), plus optional <code>DISTRACTOR: text</code> lines for extra Column B options with no correct match. Column B is shown to students in random order.</li>
+  </ul>
+
+  <p class="helptext" style="margin-top:18px;"><strong>Format 2 (quick Multiple Choice only):</strong> no <code>TYPE:</code> line needed — just the question, lettered choices, and an answer line.</p>
+  <pre style="background:#f4f6f9; border:1px solid #dbe1e8; border-radius:8px; padding:14px; font-size:0.85rem; overflow-x:auto;">
+What is Google Sheets mainly used for?
+A. Video editing
+B. Organizing and analyzing data
+C. Playing games
+D. Designing websites
+Answer Key: B
+  </pre>
+  <ul class="helptext" style="margin-top:-6px;">
+    <li>Choice lines can use "A." or "A)".</li>
+    <li>The answer line can say "Answer Key: B", "Answer: B", or "Ans: B".</li>
+    <li>Every Format 2 question is worth 1 point.</li>
+  </ul>
+
+  <p class="helptext">Leave a blank line between each question (required to tell where one question ends and the next begins). You can mix both formats in the same file.</p>
+
+  <form method="post" enctype="multipart/form-data" novalidate style="margin-top:20px;" id="bulk-import-form">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+      <div class="helptext" style="color:#a5322a;">{{ form.non_field_errors }}</div>
+    {% endif %}
+    <p>
+      <label for="{{ form.questions_text.id_for_label }}">{{ form.questions_text.label }}</label>
+      {{ form.questions_text }}
+    </p>
+    <p>
+      <label for="{{ form.file.id_for_label }}">{{ form.file.label }}</label>
+      {{ form.file }}
+    </p>
+    <p style="background:#fff6da; border:1px solid #e0a800; border-radius:8px; padding:12px 14px;">
+      <label style="display:flex; align-items:center; gap:8px; font-weight:600; margin:0;">
+        {{ form.replace_existing }} {{ form.replace_existing.label }}
+      </label>
+      <span class="helptext" style="display:block; margin-top:6px;">{{ form.replace_existing.help_text }}</span>
+    </p>
+    <button type="submit" class="btn btn-accent">Import Questions</button>
+    <a href="{% url 'exams:exam_detail' exam.id %}" class="btn btn-secondary">Cancel</a>
+  </form>
+</div>
+
+<script>
+  document.getElementById('bulk-import-form').addEventListener('submit', function (e) {
+    const replaceBox = document.getElementById('{{ form.replace_existing.id_for_label }}');
+    if (replaceBox && replaceBox.checked) {
+      const confirmed = confirm(
+        'This will permanently delete ALL existing questions for this exam before importing the new ones. Continue?'
+      );
+      if (!confirmed) {
+        e.preventDefault();
+      }
+    }
+  });
+</script>
+{% endblock %}

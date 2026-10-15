@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+{% block title %}{{ exam.title }}{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+    <div>
+      <h2 style="margin:0;">{{ exam.title }}</h2>
+      <p class="muted" style="margin:4px 0 0;">
+        {{ exam.subject.code }} · {{ exam.time_limit_minutes }} min timer ·
+        {{ exam.total_items }} / {{ max_items }} items ·
+        {{ exam.total_points }} total points
+      </p>
+      <p class="muted" style="margin:4px 0 0;">
+        Available to:
+        {% with years=exam.target_year_level_list %}
+          {% if years %}{{ years|join:", " }}{% else %}All year levels{% endif %}
+        {% endwith %}
+        ·
+        {% with sections=exam.target_section_list %}
+          {% if sections %}Section(s) {{ sections|join:", " }}{% else %}All sections{% endif %}
+        {% endwith %}
+      </p>
+    </div>
+    <div>
+      {% if exam.is_published %}
+        <span class="badge badge-published">Published</span>
+      {% else %}
+        <span class="badge badge-draft">Draft</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if exam.is_published and exam.access_code %}
+    <div class="card" style="background:#fff6da; border-color:#e0a800; margin-top:16px; margin-bottom:0;">
+      <strong>Irregular Student Access Code:</strong>
+      <span style="font-family:monospace; font-size:1.2rem; letter-spacing:2px;">{{ exam.access_code }}</span>
+      <p class="helptext" style="margin-top:6px;">
+        Give this code to any student outside the year level(s) above who still
+        needs to take this exam. They enter it on their dashboard to unlock access.
+      </p>
+    </div>
+  {% endif %}
+
+  <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
+    <a class="btn btn-accent" href="{% url 'exams:question_create' exam.id %}">+ Add Question</a>
+    <a class="btn btn-secondary" href="{% url 'exams:bulk_import_questions' exam.id %}">⇪ Bulk Import from Text File</a>
+    <a class="btn btn-secondary" href="{% url 'exams:exam_edit' exam.id %}">Edit Exam Settings</a>
+    <form method="post" action="{% url 'exams:exam_toggle_publish' exam.id %}" style="display:inline;">
+      {% csrf_token %}
+      <button type="submit" class="btn {% if exam.is_published %}btn-warn{% else %}btn-accent{% endif %}">
+        {% if exam.is_published %}Unpublish{% else %}Publish{% endif %}
+      </button>
+    </form>
+    <a class="btn btn-secondary" href="{% url 'exams:exam_results' exam.id %}">View Results</a>
+    <form method="post" action="{% url 'exams:exam_delete' exam.id %}"
+          onsubmit="return confirm('Permanently delete this exam, all its questions, and all student results for it? This cannot be undone.');"
+          style="display:inline;">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">Delete Exam</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Questions</h3>
+  {% if questions %}
+    <table>
+      <thead><tr><th>#</th><th>Type</th><th>Question</th><th>Points</th><th></th></tr></thead>
+      <tbody>
+      {% for q in questions %}
+        <tr>
+          <td>{{ q.order }}</td>
+          <td>{{ q.get_question_type_display }}</td>
+          <td>{{ q.question_text|truncatechars:70 }}</td>
+          <td>{{ q.points }}</td>
+          <td>
+            <form method="post" action="{% url 'exams:question_delete' q.id %}"
+                  onsubmit="return confirm('Delete this question?');" style="display:inline;">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No questions yet. Add up to {{ max_items }} items (multiple choice, enumeration, identification, or case analysis).</p>
+  {% endif %}
+  <p style="margin-top:16px;"><a href="{% url 'exams:subject_detail' exam.subject.id %}">&larr; Back to {{ exam.subject.code }}</a></p>
+</div>
+{% endblock %}

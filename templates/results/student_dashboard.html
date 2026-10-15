@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% block title %}Student Dashboard{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Available Exams</h2>
+  {% if available_exams %}
+    <table>
+      <thead><tr><th>Subject</th><th>Exam</th><th>Items</th><th>Time Limit</th><th></th></tr></thead>
+      <tbody>
+      {% for exam in available_exams %}
+        <tr>
+          <td>{{ exam.subject.code }}</td>
+          <td>{{ exam.title }}</td>
+          <td>{{ exam.total_items }}</td>
+          <td>{{ exam.time_limit_minutes }} min</td>
+          <td><a class="btn btn-accent btn-sm" href="{% url 'results:take_exam' exam.id %}">Start Exam</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No new exams available right now.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0;">Have an Access Code?</h3>
+  <p class="muted" style="margin-top:-6px;">
+    If an instructor gave you a code to unlock an exam not normally shown to
+    your year level, enter it below.
+  </p>
+  <form method="post" action="{% url 'results:redeem_access_code' %}" style="display:flex; gap:10px; max-width:360px;">
+    {% csrf_token %}
+    <input type="text" name="access_code" placeholder="Enter access code" style="text-transform:uppercase;" maxlength="12">
+    <button type="submit" class="btn btn-accent" style="white-space:nowrap;">Unlock Exam</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>My Results</h2>
+  {% if completed_attempts %}
+    <table>
+      <thead><tr><th>Subject</th><th>Exam</th><th>Score</th><th>%</th><th></th></tr></thead>
+      <tbody>
+      {% for attempt in completed_attempts %}
+        <tr>
+          <td>{{ attempt.exam.subject.code }}</td>
+          <td>{{ attempt.exam.title }}</td>
+          <td>{{ attempt.score|floatformat:0 }} / {{ attempt.total_points|floatformat:0 }}</td>
+          <td>{{ attempt.percentage }}%</td>
+          <td><a href="{% url 'results:attempt_result' attempt.id %}">View →</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">You haven't completed any exams yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+{% block title %}Student Registration{% endblock %}
+{% block content %}
+
+<div class="card" style="max-width:520px; margin:0 auto;">
+  <h2>Student Registration</h2>
+  <p class="muted">Instructor/admin accounts are created separately by the system administrator.</p>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+{% for field in form %}
+  <p>
+    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+
+    {% if 'password' in field.name %}
+      <div style="position:relative;">
+        {{ field }}
+
+        <button
+          type="button"
+          onclick="togglePassword('{{ field.id_for_label }}', this)"
+          style="
+            position:absolute;
+            right:10px;
+            top:50%;
+            transform:translateY(-50%);
+            border:none;
+            background:none;
+            cursor:pointer;
+            font-size:18px;
+            padding:4px;
+            color:#666;
+          "
+          aria-label="Show password"
+        >
+          👁️
+        </button>
+      </div>
+    {% else %}
+      {{ field }}
+    {% endif %}
+
+    {% if field.help_text %}
+      <div class="helptext">{{ field.help_text }}</div>
+    {% endif %}
+
+    {% for error in field.errors %}
+      <div class="helptext" style="color:#a5322a;">
+        {{ error }}
+      </div>
+    {% endfor %}
+  </p>
+{% endfor %}
+
+<button type="submit" class="btn btn-accent">
+  Create Account
+</button>
+
+  </form>
+
+  <p style="margin-top:14px;">
+    Already have an account?
+    <a href="{% url 'accounts:login' %}">Login here</a>
+  </p>
+</div>
+
+<script>
+function togglePassword(fieldId, button) {
+    const passwordField = document.getElementById(fieldId);
+
+    if (passwordField.type === "password") {
+        passwordField.type = "text";
+        button.innerHTML = "🙈";
+        button.setAttribute("aria-label", "Hide password");
+    } else {
+        passwordField.type = "password";
+        button.innerHTML = "👁️";
+        button.setAttribute("aria-label", "Show password");
+    }
+}
+</script>
+
+{% endblock %}

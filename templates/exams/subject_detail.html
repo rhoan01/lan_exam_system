@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}{{ subject.code }}{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <h2 style="margin:0;">{{ subject.code }} — {{ subject.name }}</h2>
+    <a class="btn btn-accent" href="{% url 'exams:exam_create' subject.id %}">+ New Exam</a>
+  </div>
+
+  {% if exams %}
+    <table>
+      <thead><tr><th>Title</th><th>Items</th><th>Time Limit</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      {% for exam in exams %}
+        <tr>
+          <td>{{ exam.title }}</td>
+          <td>{{ exam.total_items }} / 100</td>
+          <td>{{ exam.time_limit_minutes }} min</td>
+          <td>
+            {% if exam.is_published %}
+              <span class="badge badge-published">Published</span>
+            {% else %}
+              <span class="badge badge-draft">Draft</span>
+            {% endif %}
+          </td>
+          <td><a href="{% url 'exams:exam_detail' exam.id %}">Manage →</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No exams created for this subject yet.</p>
+  {% endif %}
+  <p style="margin-top:16px; display:flex; justify-content:space-between; align-items:center;">
+    <a href="{% url 'exams:instructor_dashboard' %}">&larr; Back to subjects</a>
+    <a href="{% url 'exams:subject_delete_confirm' subject.id %}" class="btn btn-danger btn-sm">Delete Subject</a>
+  </p>
+</div>
+{% endblock %}
