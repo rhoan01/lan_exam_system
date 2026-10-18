@@ -134,9 +134,9 @@ and only switch to MySQL for exam day itself, without touching code.
    correct. If MySQL is on a different machine, use `'%'` or the
    application server's IP instead, and set `DB_HOST` accordingly.)
 
-3. Tell Django to use it by setting environment variables before
-   starting the server (see `deployment/start_waitress.bat`, which has
-   these ready to fill in):
+3. Copy `deployment/.env.example` to the ignored local file
+   `deployment/mysql.local.bat`, fill in its environment variables, and
+   start the server with `deployment/start_waitress.bat`:
 
    ```
    DB_ENGINE=mysql
@@ -175,8 +175,8 @@ All production settings are controlled through **environment
 variables**, not by editing `examsystem/settings.py` directly. This
 keeps the same codebase working for both development and exam day. See
 `deployment/.env.example` for the full list, and
-`deployment/start_waitress.bat` for a ready-to-edit startup script that
-sets them.
+`deployment/mysql.local.bat` for this server's ignored local values.
+`deployment/start_waitress.bat` loads that file automatically.
 
 Key ones for exam day:
 ```

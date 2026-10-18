@@ -1,0 +1,36 @@
+1. Analyze the output of the code.
+
+num1 = 5
+num2 = 10
+result = num1 + num2
+print("Hello World!", result)
+
+A. Hello World
+B. hello World! 5
+C. 5
+D. Hello World! 15 *
+
+2. What is printed after the loop finishes?
+
+total = 0
+for value in range(1, 4):
+    total += value
+
+print(total)
+
+A. 3
+B. 6 *
+C. 7
+D. 10
+
+3. Which value is displayed?
+
+width = 6
+height = 4
+area = width * height
+print(area)
+
+A. 10
+B. 20
+C. 24*
+D. 64

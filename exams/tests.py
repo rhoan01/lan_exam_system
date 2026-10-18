@@ -1,0 +1,272 @@
+import io
+import tempfile
+
+from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase
+from django.test import SimpleTestCase
+from django.urls import reverse
+from PIL import Image
+
+from accounts.models import StudentProfile
+from results.models import ExamAttempt
+
+from .models import (
+    Exam, ImageIdentificationItem, Question, Subject, validate_question_image,
+)
+from .parsing import BulkImportError, parse_bulk_questions
+
+
+PROGRAMMING_SAMPLE = """1. Analyze the output.
+
+value = 2
+
+value = value * 5
+print(value)
+
+A. 2
+B. 5
+C. 10 *
+D. value * 5
+
+2) Choose the displayed word.
+This question text spans two lines.
+
+word = "LAN"
+print(word)
+
+A) WAN
+B) LAN*
+C) MAN
+"""
+
+
+class ProgrammingMultipleChoiceParserTests(SimpleTestCase):
+    def test_parses_multiple_questions_and_preserves_code(self):
+        parsed = parse_bulk_questions(PROGRAMMING_SAMPLE, max_new_items=10)
+
+        self.assertEqual(len(parsed), 2)
+        self.assertEqual(parsed[0]['question_type'], 'PMCQ')
+        self.assertEqual(parsed[0]['question_text'], 'Analyze the output.')
+        self.assertEqual(
+            parsed[0]['code_snippet'],
+            'value = 2\n\nvalue = value * 5\nprint(value)',
+        )
+        self.assertEqual(parsed[0]['choices'][-1], ('value * 5', False))
+        self.assertEqual([text for text, correct in parsed[0]['choices'] if correct], ['10'])
+        self.assertEqual(
+            parsed[1]['question_text'],
+            'Choose the displayed word.\nThis question text spans two lines.',
+        )
+        self.assertEqual([text for text, correct in parsed[1]['choices'] if correct], ['LAN'])
+
+    def test_accepts_windows_line_endings(self):
+        parsed = parse_bulk_questions(PROGRAMMING_SAMPLE.replace('\n', '\r\n'), max_new_items=10)
+        self.assertEqual(len(parsed), 2)
+        self.assertIn('\n\n', parsed[0]['code_snippet'])
+
+    def test_rejects_no_correct_choice_with_question_number(self):
+        text = """7. What prints?
+
+print(1)
+
+A. 1
+B. 2
+"""
+        with self.assertRaisesRegex(BulkImportError, r"Question 7: exactly one choice"):
+            parse_bulk_questions(text, max_new_items=10)
+
+    def test_rejects_multiple_correct_choices_with_question_number(self):
+        text = """8. What prints?
+
+print(1)
+
+A. 1 *
+B. 2*
+"""
+        with self.assertRaisesRegex(BulkImportError, r"Question 8: exactly one choice"):
+            parse_bulk_questions(text, max_new_items=10)
+
+    def test_rejects_missing_code_with_question_number(self):
+        text = """9. What prints?
+
+
+A. 1 *
+B. 2
+"""
+        with self.assertRaisesRegex(BulkImportError, r"Question 9: missing code"):
+            parse_bulk_questions(text, max_new_items=10)
+
+    def test_rejects_missing_choices_with_question_number(self):
+        text = """10. What prints?
+
+print(1)
+"""
+        with self.assertRaisesRegex(BulkImportError, r"Question 10: missing choices"):
+            parse_bulk_questions(text, max_new_items=10)
+
+    def test_rejects_missing_question_text_with_question_number(self):
+        text = """11.
+
+print(1)
+
+A. 1 *
+B. 2
+"""
+        with self.assertRaisesRegex(BulkImportError, r"Question 11: missing question text"):
+            parse_bulk_questions(text, max_new_items=10)
+
+    def test_existing_simple_mcq_format_is_unchanged(self):
+        text = """1. What is two plus two?
+A. 3
+B. 4
+Answer Key: B
+"""
+        parsed = parse_bulk_questions(text, max_new_items=10)
+        self.assertEqual(parsed[0]['question_type'], 'MCQ')
+        self.assertEqual(parsed[0]['choices'], [('3', False), ('4', True)])
+
+
+def uploaded_png(name='diagram.png', color='white'):
+    output = io.BytesIO()
+    Image.new('RGB', (8, 8), color=color).save(output, format='PNG')
+    return SimpleUploadedFile(name, output.getvalue(), content_type='image/png')
+
+
+class ImageUploadValidationTests(SimpleTestCase):
+    def test_rejects_non_image_bytes_with_allowed_extension(self):
+        disguised_file = SimpleUploadedFile(
+            'not-really-an-image.png', b'plain text', content_type='image/png'
+        )
+        with self.assertRaises(ValidationError):
+            validate_question_image(disguised_file)
+
+
+class ImageIdentificationEditorTests(TestCase):
+    def setUp(self):
+        self.media_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.media_directory.cleanup)
+        media_override = self.settings(MEDIA_ROOT=self.media_directory.name)
+        media_override.enable()
+        self.addCleanup(media_override.disable)
+
+        User = get_user_model()
+        self.instructor = User.objects.create_user(
+            username='image-teacher', password='test-pass', role=User.INSTRUCTOR
+        )
+        self.student = User.objects.create_user(
+            username='image-student', password='test-pass', role=User.STUDENT
+        )
+        StudentProfile.objects.create(
+            user=self.student,
+            id_number='IMG-001',
+            full_name='Image Student',
+            year_level='1st Year',
+            section='A',
+            course='BSIT',
+        )
+        subject = Subject.objects.create(
+            name='Computer Hardware', code='CH101', instructor=self.instructor
+        )
+        self.exam = Exam.objects.create(subject=subject, title='Diagram Exam')
+        self.client.force_login(self.instructor)
+
+    def item_formset_data(self, items, initial=0):
+        prefix = 'image_identification_items'
+        data = {
+            f'{prefix}-TOTAL_FORMS': str(len(items)),
+            f'{prefix}-INITIAL_FORMS': str(initial),
+            f'{prefix}-MIN_NUM_FORMS': '0',
+            f'{prefix}-MAX_NUM_FORMS': '100',
+        }
+        for index, item in enumerate(items):
+            if item.get('id'):
+                data[f'{prefix}-{index}-id'] = str(item['id'])
+            data[f'{prefix}-{index}-number'] = str(item['number'])
+            data[f'{prefix}-{index}-correct_answer'] = item['answer']
+            data[f'{prefix}-{index}-alternate_answers'] = item.get('alternates', '')
+            data[f'{prefix}-{index}-points'] = str(item.get('points', 1))
+        return data
+
+    def question_data(self):
+        return {
+            'question_type': Question.IMAGE_IDENTIFICATION,
+            'question_text': 'Identify each numbered component.',
+            'code_snippet': '',
+            'code_language': '',
+            'points': '1',
+            'expected_answer_count': '1',
+        }
+
+    def test_create_image_question_with_numbered_items(self):
+        data = self.question_data()
+        data.update(self.item_formset_data([
+            {'number': 2, 'answer': 'RAM slot', 'points': 3},
+            {'number': 1, 'answer': 'CPU socket', 'alternates': 'processor socket', 'points': 2},
+        ]))
+        data['image'] = uploaded_png('My unsafe diagram name.png')
+
+        response = self.client.post(
+            reverse('exams:question_create', args=[self.exam.id]), data=data
+        )
+
+        self.assertRedirects(response, reverse('exams:exam_detail', args=[self.exam.id]))
+        question = Question.objects.get(exam=self.exam)
+        self.assertEqual(question.points, 5)
+        self.assertRegex(question.image.name, r'^exam_images/\d+/[0-9a-f]{32}\.png$')
+        self.assertEqual(
+            list(question.image_identification_items.values_list('number', flat=True)),
+            [1, 2],
+        )
+
+    def test_started_exam_blocks_image_and_number_changes(self):
+        question = Question.objects.create(
+            exam=self.exam,
+            order=1,
+            question_type=Question.IMAGE_IDENTIFICATION,
+            question_text='Original instructions',
+            image=uploaded_png('original.png'),
+        )
+        first = ImageIdentificationItem.objects.create(
+            question=question, number=1, correct_answer='CPU', points=1
+        )
+        second = ImageIdentificationItem.objects.create(
+            question=question, number=2, correct_answer='RAM', points=1
+        )
+        original_image_name = question.image.name
+        ExamAttempt.objects.create(student=self.student, exam=self.exam)
+
+        data = self.question_data()
+        data['question_text'] = 'Changed instructions'
+        data.update(self.item_formset_data([
+            {'id': first.id, 'number': 3, 'answer': 'CPU', 'points': 1},
+            {'id': second.id, 'number': 2, 'answer': 'RAM', 'points': 1},
+        ], initial=2))
+
+        response = self.client.post(
+            reverse('exams:question_edit', args=[question.id]), data=data
+        )
+
+        self.assertEqual(response.status_code, 200)
+        question.refresh_from_db()
+        self.assertEqual(question.question_text, 'Original instructions')
+        self.assertEqual(question.image.name, original_image_name)
+        self.assertEqual(
+            list(question.image_identification_items.values_list('number', flat=True)),
+            [1, 2],
+        )
+        self.assertContains(response, 'Item numbers cannot be added, removed, or changed')
+
+        data = self.question_data()
+        data.update(self.item_formset_data([
+            {'id': first.id, 'number': 1, 'answer': 'CPU', 'points': 1},
+            {'id': second.id, 'number': 2, 'answer': 'RAM', 'points': 1},
+        ], initial=2))
+        data['image'] = uploaded_png('replacement.png', color='black')
+        response = self.client.post(
+            reverse('exams:question_edit', args=[question.id]), data=data
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'cannot be replaced after a student has started')

@@ -1,12 +1,48 @@
 import random
 import string
+import uuid
+from pathlib import Path
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import FileExtensionValidator, MinValueValidator
 from django.db import models
+from django.db import transaction
+from django.db.models.signals import post_delete, post_save, pre_save
+from django.dispatch import receiver
+from PIL import Image, UnidentifiedImageError
 
 MAX_ITEMS_PER_EXAM = 100
 ACCESS_CODE_LENGTH = 8
+MAX_QUESTION_IMAGE_SIZE = 5 * 1024 * 1024
+
+
+def image_identification_upload_to(instance, filename):
+    """Keep instructor filenames off disk and group uploads by exam."""
+    extension = Path(filename).suffix.lower()
+    return f'exam_images/{instance.exam_id}/{uuid.uuid4().hex}{extension}'
+
+
+def validate_question_image(uploaded_file):
+    """Validate image bytes as well as the browser-provided filename."""
+    if uploaded_file.size > MAX_QUESTION_IMAGE_SIZE:
+        raise ValidationError("Image files must be 5 MB or smaller.")
+
+    was_closed = uploaded_file.closed
+    position = uploaded_file.tell()
+    try:
+        uploaded_file.seek(0)
+        with Image.open(uploaded_file) as image:
+            if image.format not in {'PNG', 'JPEG', 'WEBP'}:
+                raise ValidationError("Upload a PNG, JPG, JPEG, or WEBP image.")
+            image.verify()
+    except (UnidentifiedImageError, OSError, SyntaxError):
+        raise ValidationError("The uploaded file is not a valid image.")
+    finally:
+        if was_closed:
+            uploaded_file.close()
+        elif not uploaded_file.closed:
+            uploaded_file.seek(position)
 
 
 class Subject(models.Model):
@@ -112,25 +148,46 @@ class Exam(models.Model):
 
 class Question(models.Model):
     MCQ = 'MCQ'
+    PROGRAMMING_MCQ = 'PMCQ'
     TF = 'TF'
     ENUM = 'ENUM'
     IDENT = 'IDENT'
     CASE = 'CASE'
     MATCH = 'MATCH'
+    IMAGE_IDENTIFICATION = 'image_identification'
     TYPE_CHOICES = (
         (MCQ, 'Multiple Choice'),
+        (PROGRAMMING_MCQ, 'Programming Multiple Choice'),
         (TF, 'True or False'),
         (ENUM, 'Enumeration'),
         (IDENT, 'Identification'),
         (CASE, 'Case Analysis (essay/typed answer)'),
         (MATCH, 'Matching Type'),
+        (IMAGE_IDENTIFICATION, 'Image Identification'),
     )
-    CHOICE_BASED_TYPES = (MCQ, TF)
+    CHOICE_BASED_TYPES = (MCQ, PROGRAMMING_MCQ, TF)
 
     exam = models.ForeignKey(Exam, on_delete=models.CASCADE, related_name='questions')
     order = models.PositiveIntegerField(default=1)
-    question_type = models.CharField(max_length=10, choices=TYPE_CHOICES)
+    question_type = models.CharField(max_length=24, choices=TYPE_CHOICES)
     question_text = models.TextField()
+    image = models.ImageField(
+        upload_to=image_identification_upload_to,
+        blank=True,
+        validators=[
+            FileExtensionValidator(allowed_extensions=['png', 'jpg', 'jpeg', 'webp']),
+            validate_question_image,
+        ],
+        help_text="Image Identification only: PNG, JPG, JPEG, or WEBP; maximum 5 MB.",
+    )
+    code_snippet = models.TextField(
+        blank=True,
+        help_text="Programming Multiple Choice only: code shown between the question and choices.",
+    )
+    code_language = models.CharField(
+        max_length=30, blank=True,
+        help_text="Optional language label, such as Python, C#, or Java.",
+    )
     points = models.PositiveIntegerField(default=1)
     expected_answer_count = models.PositiveIntegerField(
         default=1, help_text="Enumeration only: how many separate answers are expected."
@@ -145,14 +202,23 @@ class Question(models.Model):
                 raise ValidationError(
                     f"This exam already has the maximum of {MAX_ITEMS_PER_EXAM} items."
                 )
+        if self.question_type == self.IMAGE_IDENTIFICATION and not self.image:
+            raise ValidationError({'image': "Upload the numbered image for this question."})
 
     def is_choice_based(self):
-        """MCQ and True/False both work by picking one of a fixed set of choices."""
+        """Choice-based questions work by picking one fixed Choice row."""
         return self.question_type in self.CHOICE_BASED_TYPES
 
     def is_objective(self):
         """Can be graded with exact/near-exact matching."""
-        return self.question_type in (self.MCQ, self.TF, self.IDENT)
+        return self.question_type in (
+            self.MCQ, self.PROGRAMMING_MCQ, self.TF, self.IDENT,
+            self.IMAGE_IDENTIFICATION,
+        )
+
+    def code_lines(self):
+        """Return code as display lines without changing its whitespace."""
+        return self.code_snippet.split('\n')
 
     def column_b_pool(self):
         """All Column B options for a Matching question: each pair's correct
@@ -218,3 +284,74 @@ class MatchingDistractor(models.Model):
 
     def __str__(self):
         return self.text
+
+
+class ImageIdentificationItem(models.Model):
+    """One numbered label and its accepted answers within an image question."""
+    question = models.ForeignKey(
+        Question, on_delete=models.CASCADE, related_name='image_identification_items'
+    )
+    number = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    correct_answer = models.CharField(max_length=255)
+    alternate_answers = models.TextField(
+        blank=True,
+        help_text="Optional alternate accepted answers, one per line.",
+    )
+    points = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
+
+    class Meta:
+        ordering = ['number']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['question', 'number'],
+                name='unique_image_identification_number_per_question',
+            ),
+        ]
+
+    def accepted_answers(self):
+        alternates = [answer.strip() for answer in self.alternate_answers.splitlines() if answer.strip()]
+        return [self.correct_answer.strip(), *alternates]
+
+    def __str__(self):
+        return f"{self.question} - #{self.number}: {self.correct_answer}"
+
+
+def _sync_image_question_points(question_id):
+    total = ImageIdentificationItem.objects.filter(question_id=question_id).aggregate(
+        total=models.Sum('points')
+    )['total'] or 0
+    if total:
+        Question.objects.filter(
+            pk=question_id, question_type=Question.IMAGE_IDENTIFICATION
+        ).update(points=total)
+
+
+@receiver(post_save, sender=ImageIdentificationItem)
+@receiver(post_delete, sender=ImageIdentificationItem)
+def sync_image_question_points(sender, instance, **kwargs):
+    _sync_image_question_points(instance.question_id)
+
+
+@receiver(pre_save, sender=Question)
+def remember_replaced_question_image(sender, instance, **kwargs):
+    if not instance.pk:
+        return
+    old_name = sender.objects.filter(pk=instance.pk).values_list('image', flat=True).first()
+    new_name = instance.image.name if instance.image else ''
+    instance._replaced_image_name = old_name if old_name and old_name != new_name else ''
+
+
+@receiver(post_save, sender=Question)
+def delete_replaced_question_image(sender, instance, **kwargs):
+    old_name = getattr(instance, '_replaced_image_name', '')
+    if old_name:
+        storage = instance._meta.get_field('image').storage
+        transaction.on_commit(lambda: storage.delete(old_name))
+
+
+@receiver(post_delete, sender=Question)
+def delete_question_image(sender, instance, **kwargs):
+    if instance.image:
+        storage = instance.image.storage
+        image_name = instance.image.name
+        transaction.on_commit(lambda: storage.delete(image_name))

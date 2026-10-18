@@ -3,6 +3,10 @@ __pycache__/
 *.pyc
 db.sqlite3
 staticfiles/
+media/
 backups/
 venv_old_py314/
 .env
+deployment/mysql.local.bat
+deployment/mysql.root.local.txt
+deployment/runtime/

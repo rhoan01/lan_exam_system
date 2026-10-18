@@ -1,92 +1,107 @@
 {% extends 'base.html' %}
 {% block title %}{{ exam.title }}{% endblock %}
 {% block content %}
-<div class="card">
-  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-    <div>
-      <h2 style="margin:0;">{{ exam.title }}</h2>
-      <p class="muted" style="margin:4px 0 0;">
-        {{ exam.subject.code }} · {{ exam.time_limit_minutes }} min timer ·
-        {{ exam.total_items }} / {{ max_items }} items ·
-        {{ exam.total_points }} total points
-      </p>
-      <p class="muted" style="margin:4px 0 0;">
-        Available to:
-        {% with years=exam.target_year_level_list %}
-          {% if years %}{{ years|join:", " }}{% else %}All year levels{% endif %}
-        {% endwith %}
-        ·
-        {% with sections=exam.target_section_list %}
-          {% if sections %}Section(s) {{ sections|join:", " }}{% else %}All sections{% endif %}
-        {% endwith %}
-      </p>
-    </div>
-    <div>
-      {% if exam.is_published %}
-        <span class="badge badge-published">Published</span>
-      {% else %}
-        <span class="badge badge-draft">Draft</span>
-      {% endif %}
-    </div>
-  </div>
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="{% url 'exams:instructor_dashboard' %}">Dashboard</a><span aria-hidden="true">/</span>
+  <a href="{% url 'exams:subject_detail' exam.subject.id %}">{{ exam.subject.code }}</a><span aria-hidden="true">/</span><span>{{ exam.title }}</span>
+</nav>
 
-  {% if exam.is_published and exam.access_code %}
-    <div class="card" style="background:#fff6da; border-color:#e0a800; margin-top:16px; margin-bottom:0;">
-      <strong>Irregular Student Access Code:</strong>
-      <span style="font-family:monospace; font-size:1.2rem; letter-spacing:2px;">{{ exam.access_code }}</span>
-      <p class="helptext" style="margin-top:6px;">
-        Give this code to any student outside the year level(s) above who still
-        needs to take this exam. They enter it on their dashboard to unlock access.
-      </p>
+<section class="hero-panel" style="margin-bottom:20px;">
+  <div class="page-header" style="margin:0; align-items:center;">
+    <div class="page-header-copy">
+      <span class="eyebrow">{{ exam.subject.code }} · Exam workspace</span>
+      <h1>{{ exam.title }}</h1>
+      <div class="meta-list" style="color:#c7d2e3; margin-top:13px;">
+        <span class="meta-item">{{ exam.time_limit_minutes }} minute timer</span>
+        <span class="meta-item">{{ exam.total_items }} / {{ max_items }} questions</span>
+        <span class="meta-item">{{ exam.total_points }} total points</span>
+        <span class="meta-item">{% with years=exam.target_year_level_list %}{% if years %}{{ years|join:", " }}{% else %}All year levels{% endif %}{% endwith %}</span>
+        <span class="meta-item">{% with sections=exam.target_section_list %}{% if sections %}Section {{ sections|join:", " }}{% else %}All sections{% endif %}{% endwith %}</span>
+      </div>
     </div>
-  {% endif %}
-
-  <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
-    <a class="btn btn-accent" href="{% url 'exams:question_create' exam.id %}">+ Add Question</a>
-    <a class="btn btn-secondary" href="{% url 'exams:bulk_import_questions' exam.id %}">⇪ Bulk Import from Text File</a>
-    <a class="btn btn-secondary" href="{% url 'exams:exam_edit' exam.id %}">Edit Exam Settings</a>
-    <form method="post" action="{% url 'exams:exam_toggle_publish' exam.id %}" style="display:inline;">
-      {% csrf_token %}
-      <button type="submit" class="btn {% if exam.is_published %}btn-warn{% else %}btn-accent{% endif %}">
-        {% if exam.is_published %}Unpublish{% else %}Publish{% endif %}
-      </button>
-    </form>
-    <a class="btn btn-secondary" href="{% url 'exams:exam_results' exam.id %}">View Results</a>
-    <form method="post" action="{% url 'exams:exam_delete' exam.id %}"
-          onsubmit="return confirm('Permanently delete this exam, all its questions, and all student results for it? This cannot be undone.');"
-          style="display:inline;">
-      {% csrf_token %}
-      <button type="submit" class="btn btn-danger">Delete Exam</button>
-    </form>
+    {% if exam.is_published %}<span class="badge badge-published">Published</span>{% else %}<span class="badge badge-neutral" style="background:rgba(255,255,255,.12); color:#e7edf8;">Draft</span>{% endif %}
   </div>
+</section>
+
+<div class="stats-grid">
+  <div class="stat-card"><div class="stat-label">Questions</div><span class="stat-value">{{ exam.total_items }}</span></div>
+  <div class="stat-card"><div class="stat-label">Total points</div><span class="stat-value">{{ exam.total_points }}</span></div>
+  <div class="stat-card"><div class="stat-label">Duration</div><span class="stat-value">{{ exam.time_limit_minutes }}<small style="font-size:.8rem; font-weight:650; letter-spacing:0;"> min</small></span></div>
 </div>
 
-<div class="card">
-  <h3>Questions</h3>
+{% if exam.is_published and exam.access_code %}
+  <div class="notice notice-warning" style="margin-bottom:20px;">
+    <strong>Irregular student access</strong><span class="access-code">{{ exam.access_code }}</span>
+    <span class="helptext">Share this code only with students outside the assigned year level or section who need access.</span>
+  </div>
+{% endif %}
+
+<section class="card">
+  <div class="card-header">
+    <div><span class="eyebrow">Exam controls</span><h2>Manage assessment</h2><p>Build the question set, configure delivery, or review submissions.</p></div>
+  </div>
+  <div class="card-actions">
+    <a class="btn btn-accent" href="{% url 'exams:question_create' exam.id %}"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14"/></svg>Add question</a>
+    <a class="btn btn-secondary" href="{% url 'exams:bulk_import_questions' exam.id %}">Bulk import</a>
+    <a class="btn btn-secondary" href="{% url 'exams:exam_edit' exam.id %}">Exam settings</a>
+    <a class="btn btn-secondary" href="{% url 'exams:exam_results' exam.id %}">View results</a>
+    <form method="post" action="{% url 'exams:exam_toggle_publish' exam.id %}">{% csrf_token %}<button type="submit" class="btn {% if exam.is_published %}btn-warn{% else %}btn-accent{% endif %}">{% if exam.is_published %}Unpublish{% else %}Publish exam{% endif %}</button></form>
+    <form method="post" action="{% url 'exams:exam_delete' exam.id %}" onsubmit="return confirm('Permanently delete this exam, all its questions, and all student results for it? This cannot be undone.');">{% csrf_token %}<button type="submit" class="btn btn-danger">Delete</button></form>
+  </div>
+</section>
+
+<section class="card">
+  <div class="card-header">
+    <div><span class="eyebrow">Question bank</span><h2>Questions</h2><p>Questions appear in the configured order unless shuffling is enabled.</p></div>
+    <span class="badge badge-neutral">{{ questions|length }} item{{ questions|length|pluralize }}</span>
+  </div>
   {% if questions %}
-    <table>
-      <thead><tr><th>#</th><th>Type</th><th>Question</th><th>Points</th><th></th></tr></thead>
-      <tbody>
-      {% for q in questions %}
-        <tr>
-          <td>{{ q.order }}</td>
-          <td>{{ q.get_question_type_display }}</td>
-          <td>{{ q.question_text|truncatechars:70 }}</td>
-          <td>{{ q.points }}</td>
-          <td>
-            <form method="post" action="{% url 'exams:question_delete' q.id %}"
-                  onsubmit="return confirm('Delete this question?');" style="display:inline;">
-              {% csrf_token %}
-              <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-            </form>
-          </td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-wrap responsive-table">
+      <table>
+        <thead><tr><th>#</th><th>Type</th><th>Question</th><th>Points</th><th></th></tr></thead>
+        <tbody>
+        {% for q in questions %}
+          <tr>
+            <td data-label="#"><strong>{{ q.order }}</strong></td>
+            <td data-label="Type"><span class="qtype-tag">{{ q.get_question_type_display }}</span></td>
+            <td data-label="Question">
+              {{ q.question_text|truncatechars:82 }}
+              {% if q.question_type == 'PMCQ' %}
+                <div class="code-editor compact-code-editor">
+                  <div class="code-titlebar"><span>{{ q.code_language|default:"Code" }}</span><span>Teacher preview</span></div>
+                  <ol class="code-lines">{% for line in q.code_lines %}<li><code>{{ line|default:" " }}</code></li>{% endfor %}</ol>
+                </div>
+                <div class="teacher-choice-list">
+                  {% for choice in q.choices.all %}
+                    <div class="teacher-choice{% if choice.is_correct %} is-correct{% endif %}">
+                      {{ choice.choice_text }}{% if choice.is_correct %}<span>Correct</span>{% endif %}
+                    </div>
+                  {% endfor %}
+                </div>
+              {% elif q.question_type == 'image_identification' %}
+                {% if q.image %}<img src="{{ q.image.url }}" alt="Numbered identification image" class="question-image teacher-image-preview">{% endif %}
+                <div class="helptext">{{ q.image_identification_items.count }} numbered label{{ q.image_identification_items.count|pluralize }}</div>
+              {% endif %}
+            </td>
+            <td data-label="Points">{{ q.points }}</td>
+            <td data-label="">
+              <div class="inline-actions">
+                <a href="{% url 'exams:question_edit' q.id %}" class="btn btn-sm btn-secondary">Edit</a>
+                <form method="post" action="{% url 'exams:question_delete' q.id %}" onsubmit="return confirm('Delete this question?');">{% csrf_token %}<button type="submit" class="btn btn-sm btn-danger">Delete</button></form>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
   {% else %}
-    <p class="muted">No questions yet. Add up to {{ max_items }} items (multiple choice, enumeration, identification, or case analysis).</p>
+    <div class="empty-state">
+      <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M6 3h9l4 4v14H6V3Z"/><path d="M14 3v5h5M12 11v6M9 14h6"/></svg></div>
+      <h3>No questions yet</h3>
+      <p>Add questions individually or import a prepared text file. Each exam can contain up to {{ max_items }} items.</p>
+      <div class="inline-actions" style="justify-content:center;"><a class="btn btn-accent" href="{% url 'exams:question_create' exam.id %}">Add first question</a><a class="btn btn-secondary" href="{% url 'exams:bulk_import_questions' exam.id %}">Import questions</a></div>
+    </div>
   {% endif %}
-  <p style="margin-top:16px;"><a href="{% url 'exams:subject_detail' exam.subject.id %}">&larr; Back to {{ exam.subject.code }}</a></p>
-</div>
+</section>
 {% endblock %}

@@ -4,40 +4,101 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}ITE Department{% endblock %}</title>
+  <meta name="theme-color" content="#172554">
+  <meta name="description" content="ITE Department LAN examination portal">
+  <title>{% block title %}ITE Exam Portal{% endblock %} · ITE Department</title>
   <link rel="stylesheet" href="{% static 'css/style.css' %}">
   {% block extra_head %}{% endblock %}
 </head>
-<body>
-  <div class="navbar">
-    <a href="{% url 'accounts:redirect_after_login' %}" class="brand">ITE Department</a>
-    {% if user.is_authenticated %}
-      {% if user.is_instructor %}
-        <a href="{% url 'exams:instructor_dashboard' %}">Dashboard</a>
-      {% else %}
-        <a href="{% url 'results:student_dashboard' %}">Dashboard</a>
-      {% endif %}
-      <span style="color:#cfe0f5; margin-left:18px;">{{ user.get_full_name|default:user.username }}</span>
-      <form action="{% url 'accounts:logout' %}" method="post" style="display:inline; margin-left:14px;">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-sm btn-secondary">Logout</button>
-      </form>
-    {% else %}
-      <a href="{% url 'accounts:login' %}">Login</a>
-      <a href="{% url 'accounts:register' %}">Register</a>
-    {% endif %}
-  </div>
+<body class="{% block body_class %}{% endblock %}">
+  <a class="skip-link" href="#main-content">Skip to main content</a>
 
-  <div class="container">
+  <header class="app-header">
+    <div class="nav-shell">
+      <a href="{% url 'accounts:redirect_after_login' %}" class="brand" aria-label="ITE Exam Portal home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M5 4.75h10.5A3.5 3.5 0 0 1 19 8.25v11H8.5A3.5 3.5 0 0 1 5 15.75v-11Z"/><path d="M8 8h7M8 11.5h7M8 15h4"/></svg>
+        </span>
+        <span class="brand-copy">
+          <strong>ITE Exam Portal</strong>
+          <small>Department of Information Technology</small>
+        </span>
+      </a>
+
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-navigation" aria-label="Toggle navigation">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+
+      <nav class="primary-nav" id="primary-navigation" aria-label="Primary navigation">
+        {% if user.is_authenticated %}
+          {% if user.is_instructor %}
+            <a class="nav-link" href="{% url 'exams:instructor_dashboard' %}">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 13h6V4H4v9Zm0 7h6v-3H4v3Zm10 0h6v-9h-6v9Zm0-16v3h6V4h-6Z"/></svg>
+              Dashboard
+            </a>
+          {% else %}
+            <a class="nav-link" href="{% url 'results:student_dashboard' %}">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 13h6V4H4v9Zm0 7h6v-3H4v3Zm10 0h6v-9h-6v9Zm0-16v3h6V4h-6Z"/></svg>
+              Dashboard
+            </a>
+          {% endif %}
+          <div class="user-menu">
+            <span class="user-avatar" aria-hidden="true">{{ user.get_full_name|default:user.username|first|upper }}</span>
+            <span class="user-copy">
+              <strong>{{ user.get_full_name|default:user.username }}</strong>
+              <small>{% if user.is_instructor %}Instructor{% else %}Student{% endif %}</small>
+            </span>
+            <form action="{% url 'accounts:logout' %}" method="post">
+              {% csrf_token %}
+              <button type="submit" class="icon-button" aria-label="Log out" title="Log out">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4M14 8l4 4-4 4M9 12h9"/></svg>
+              </button>
+            </form>
+          </div>
+        {% else %}
+          <a class="nav-link" href="{% url 'accounts:login' %}">Sign in</a>
+          <a class="btn btn-light btn-sm" href="{% url 'accounts:register' %}">Create account</a>
+        {% endif %}
+      </nav>
+    </div>
+  </header>
+
+  <main class="page-shell" id="main-content" tabindex="-1">
     {% if messages %}
-      <ul class="messages">
+      <div class="messages" role="status" aria-live="polite">
         {% for message in messages %}
-          <li class="{{ message.tags }}">{{ message }}</li>
+          <div class="message {{ message.tags }}">
+            <span class="message-icon" aria-hidden="true">
+              {% if message.tags == 'success' %}✓{% elif message.tags == 'warning' %}!{% elif message.tags == 'error' %}×{% else %}i{% endif %}
+            </span>
+            <span>{{ message }}</span>
+          </div>
         {% endfor %}
-      </ul>
+      </div>
     {% endif %}
 
     {% block content %}{% endblock %}
-  </div>
+  </main>
+
+  <footer class="app-footer">
+    <div class="footer-shell">
+      <span>ITE Department · Secure LAN Examination System</span>
+      <span class="system-status"><i aria-hidden="true"></i> Local network ready</span>
+    </div>
+  </footer>
+
+  <script>
+    (() => {
+      const toggle = document.querySelector('.nav-toggle');
+      const nav = document.querySelector('.primary-nav');
+      if (!toggle || !nav) return;
+      toggle.addEventListener('click', () => {
+        const open = toggle.getAttribute('aria-expanded') === 'true';
+        toggle.setAttribute('aria-expanded', String(!open));
+        nav.classList.toggle('is-open', !open);
+      });
+    })();
+  </script>
+  {% block extra_scripts %}{% endblock %}
 </body>
 </html>

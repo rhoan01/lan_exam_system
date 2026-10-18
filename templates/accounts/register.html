@@ -1,84 +1,69 @@
 {% extends 'base.html' %}
-{% block title %}Student Registration{% endblock %}
+{% block title %}Create student account{% endblock %}
+{% block body_class %}auth-page{% endblock %}
 {% block content %}
-
-<div class="card" style="max-width:520px; margin:0 auto;">
-  <h2>Student Registration</h2>
-  <p class="muted">Instructor/admin accounts are created separately by the system administrator.</p>
-
-  <form method="post" novalidate>
-    {% csrf_token %}
-
-{% for field in form %}
-  <p>
-    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-
-    {% if 'password' in field.name %}
-      <div style="position:relative;">
-        {{ field }}
-
-        <button
-          type="button"
-          onclick="togglePassword('{{ field.id_for_label }}', this)"
-          style="
-            position:absolute;
-            right:10px;
-            top:50%;
-            transform:translateY(-50%);
-            border:none;
-            background:none;
-            cursor:pointer;
-            font-size:18px;
-            padding:4px;
-            color:#666;
-          "
-          aria-label="Show password"
-        >
-          👁️
-        </button>
+<div class="auth-layout">
+  <aside class="auth-aside">
+    <a href="{% url 'accounts:login' %}" class="auth-brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M5 4.75h10.5A3.5 3.5 0 0 1 19 8.25v11H8.5A3.5 3.5 0 0 1 5 15.75v-11Z"/><path d="M8 8h7M8 11.5h7M8 15h4"/></svg>
+      </span>
+      <span class="brand-copy"><strong>ITE Exam Portal</strong><small>Department of Information Technology</small></span>
+    </a>
+    <div class="auth-hero">
+      <span class="eyebrow">Student registration</span>
+      <h1>One account for every examination.</h1>
+      <p>Set up your student profile once, then access every exam assigned to your year level and section.</p>
+      <div class="auth-points">
+        <div class="auth-point"><i>1</i> Enter your academic details</div>
+        <div class="auth-point"><i>2</i> Create a secure password</div>
+        <div class="auth-point"><i>3</i> Sign in and view available exams</div>
       </div>
-    {% else %}
-      {{ field }}
-    {% endif %}
-
-    {% if field.help_text %}
-      <div class="helptext">{{ field.help_text }}</div>
-    {% endif %}
-
-    {% for error in field.errors %}
-      <div class="helptext" style="color:#a5322a;">
-        {{ error }}
+    </div>
+    <p class="auth-note">Instructor accounts are issued separately by the system administrator.</p>
+  </aside>
+  <section class="auth-main">
+    <div class="auth-form">
+      <div class="auth-form-header">
+        <span class="eyebrow">Get started</span>
+        <h2>Create your student account</h2>
+        <p>Use the same information shown on your school records.</p>
       </div>
-    {% endfor %}
-  </p>
-{% endfor %}
-
-<button type="submit" class="btn btn-accent">
-  Create Account
-</button>
-
-  </form>
-
-  <p style="margin-top:14px;">
-    Already have an account?
-    <a href="{% url 'accounts:login' %}">Login here</a>
-  </p>
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {% for field in form %}
+          <p>
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {% if 'password' in field.name %}
+              <span class="password-field">
+                {{ field }}
+                <button type="button" class="password-toggle" data-password-toggle="{{ field.id_for_label }}" aria-label="Show password" title="Show password">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+                </button>
+              </span>
+            {% else %}{{ field }}{% endif %}
+            {% if field.help_text %}<div class="helptext">{{ field.help_text|safe }}</div>{% endif %}
+            {% for error in field.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+          </p>
+        {% endfor %}
+        {% if form.non_field_errors %}<div class="message error">{{ form.non_field_errors }}</div>{% endif %}
+        <button type="submit" class="btn btn-accent btn-lg">Create account</button>
+      </form>
+      <p class="auth-switch">Already registered? <a href="{% url 'accounts:login' %}"><strong>Sign in instead</strong></a></p>
+    </div>
+  </section>
 </div>
-
+{% endblock %}
+{% block extra_scripts %}
 <script>
-function togglePassword(fieldId, button) {
-    const passwordField = document.getElementById(fieldId);
-
-    if (passwordField.type === "password") {
-        passwordField.type = "text";
-        button.innerHTML = "🙈";
-        button.setAttribute("aria-label", "Hide password");
-    } else {
-        passwordField.type = "password";
-        button.innerHTML = "👁️";
-        button.setAttribute("aria-label", "Show password");
-    }
-}
+  document.querySelectorAll('[data-password-toggle]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const field = document.getElementById(button.dataset.passwordToggle);
+      const showing = field.type === 'text';
+      field.type = showing ? 'password' : 'text';
+      button.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+      button.setAttribute('title', showing ? 'Show password' : 'Hide password');
+    });
+  });
 </script>
-
 {% endblock %}

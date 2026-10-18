@@ -1,15 +1,15 @@
 {% extends 'base.html' %}
 {% block title %}Bulk Import Questions{% endblock %}
 {% block content %}
+<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="{% url 'exams:exam_detail' exam.id %}">{{ exam.title }}</a><span aria-hidden="true">/</span><span>Bulk import</span></nav>
+<div class="page-header"><div class="page-header-copy"><span class="eyebrow">Question tools</span><h1>Bulk import questions</h1><p class="page-subtitle">Paste prepared questions or upload a plain-text file. {{ remaining_slots }} more item{{ remaining_slots|pluralize }} can be added to {{ exam.title }}.</p></div></div>
+<div class="grid import-layout">
 <div class="card">
-  <h2>Bulk Import Questions — {{ exam.title }}</h2>
-  <p class="muted">You can write your questions in Notepad (or any plain text editor), then paste them below
-  or upload the .txt file. {{ remaining_slots }} more item(s) can be added to this exam.</p>
 
-  <h3 style="margin-top:20px;">Format Guide — two formats are supported</h3>
+  <div class="card-header"><div><span class="eyebrow">Reference</span><h2>Formatting guide</h2><p>Three import formats are supported.</p></div></div>
 
   <p class="helptext"><strong>Format 1 (all question types):</strong> each question starts with a <code>TYPE:</code> line — <code>MCQ</code>, <code>TF</code>, <code>ENUM</code>, <code>IDENT</code>, <code>CASE</code>, or <code>MATCH</code>.</p>
-  <pre style="background:#f4f6f9; border:1px solid #dbe1e8; border-radius:8px; padding:14px; font-size:0.85rem; overflow-x:auto;">
+  <pre>
 TYPE: MCQ
 Q: What is the capital of France?
 POINTS: 2
@@ -54,7 +54,7 @@ DISTRACTOR: Network as a Service
   </ul>
 
   <p class="helptext" style="margin-top:18px;"><strong>Format 2 (quick Multiple Choice only):</strong> no <code>TYPE:</code> line needed — just the question, lettered choices, and an answer line.</p>
-  <pre style="background:#f4f6f9; border:1px solid #dbe1e8; border-radius:8px; padding:14px; font-size:0.85rem; overflow-x:auto;">
+  <pre>
 What is Google Sheets mainly used for?
 A. Video editing
 B. Organizing and analyzing data
@@ -68,33 +68,140 @@ Answer Key: B
     <li>Every Format 2 question is worth 1 point.</li>
   </ul>
 
-  <p class="helptext">Leave a blank line between each question (required to tell where one question ends and the next begins). You can mix both formats in the same file.</p>
+  <p class="helptext" style="margin-top:18px;"><strong>Format 3 (Programming Multiple Choice):</strong> number each question and separate the question text, code, and choices with blank lines. Mark exactly one trailing choice with <code>*</code>.</p>
+  <pre>
+1. Analyze the output of the code.
 
-  <form method="post" enctype="multipart/form-data" novalidate style="margin-top:20px;" id="bulk-import-form">
+num1 = 5
+num2 = 10
+print("Hello World!", num1 + num2)
+
+A. Hello World
+B. Hello World! 5
+C. 5
+D. Hello World! 15 *
+  </pre>
+  <ul class="helptext" style="margin-top:-6px;">
+    <li>The code may contain blank lines, tabs, indentation, and asterisks.</li>
+    <li>Only an asterisk at the end of a choice marks it correct.</li>
+    <li>Start each following question with a numbered line such as <code>2.</code> after the previous choices.</li>
+  </ul>
+
+  <p class="helptext">For Formats 1 and 2, leave a blank line between questions. Keep Programming Multiple Choice questions together in their own import. Image Identification is created in the question editor because its image cannot be included in a text import.</p>
+
+</div>
+<div class="card">
+  <div class="card-header"><div><span class="eyebrow">Import source</span><h2>Add your questions</h2><p>Paste text or choose one .txt file.</p></div></div>
+  <form method="post" enctype="multipart/form-data" novalidate id="bulk-import-form">
     {% csrf_token %}
     {% if form.non_field_errors %}
-      <div class="helptext" style="color:#a5322a;">{{ form.non_field_errors }}</div>
+      <div class="message error">{{ form.non_field_errors }}</div>
     {% endif %}
     <p>
       <label for="{{ form.questions_text.id_for_label }}">{{ form.questions_text.label }}</label>
       {{ form.questions_text }}
     </p>
+    <div id="import-code-preview" class="code-preview-wrap" hidden>
+      <span class="helptext">Live preview of the first Programming Multiple Choice code block</span>
+      <div class="code-editor">
+        <div class="code-titlebar"><span>Code</span><span>Read only</span></div>
+        <ol class="code-lines" data-import-code-lines></ol>
+      </div>
+      <div class="teacher-choice-list" data-import-choices></div>
+    </div>
     <p>
       <label for="{{ form.file.id_for_label }}">{{ form.file.label }}</label>
       {{ form.file }}
     </p>
-    <p style="background:#fff6da; border:1px solid #e0a800; border-radius:8px; padding:12px 14px;">
+    <div class="check-panel">
       <label style="display:flex; align-items:center; gap:8px; font-weight:600; margin:0;">
         {{ form.replace_existing }} {{ form.replace_existing.label }}
       </label>
       <span class="helptext" style="display:block; margin-top:6px;">{{ form.replace_existing.help_text }}</span>
-    </p>
-    <button type="submit" class="btn btn-accent">Import Questions</button>
-    <a href="{% url 'exams:exam_detail' exam.id %}" class="btn btn-secondary">Cancel</a>
+    </div>
+    <div class="form-actions"><button type="submit" class="btn btn-accent">Import questions</button><a href="{% url 'exams:exam_detail' exam.id %}" class="btn btn-secondary">Cancel</a></div>
   </form>
+</div>
 </div>
 
 <script>
+  const questionsText = document.getElementById('{{ form.questions_text.id_for_label }}');
+  const fileInput = document.getElementById('{{ form.file.id_for_label }}');
+  const preview = document.getElementById('import-code-preview');
+  const previewLines = preview.querySelector('[data-import-code-lines]');
+  const previewChoices = preview.querySelector('[data-import-choices]');
+  const choicePattern = /^[A-Za-z][.)]\s+(.+)$/;
+
+  function choiceRunBefore(lines, boundary) {
+    let index = boundary - 1;
+    while (index >= 0 && !lines[index].trim()) index--;
+    let count = 0;
+    while (index >= 0 && choicePattern.test(lines[index])) { count++; index--; }
+    return count >= 2;
+  }
+
+  function firstProgrammingQuestion(raw) {
+    const lines = raw.replace(/\r\n?/g, '\n').split('\n');
+    while (lines.length && !lines[0].trim()) lines.shift();
+    if (!lines.length || !/^\d+[.)]\s+/.test(lines[0])) return null;
+    let end = lines.length;
+    for (let i = 1; i < lines.length; i++) {
+      if (/^\d+[.)]\s+/.test(lines[i]) && !lines[i - 1].trim() && choiceRunBefore(lines, i)) {
+        end = i;
+        break;
+      }
+    }
+    const block = lines.slice(0, end);
+    while (block.length && !block[block.length - 1].trim()) block.pop();
+    const firstBlank = block.findIndex(line => !line.trim());
+    let choiceStart = block.length;
+    while (choiceStart > 0 && choicePattern.test(block[choiceStart - 1])) choiceStart--;
+    if (firstBlank < 0 || choiceStart >= block.length) return null;
+    const code = block.slice(firstBlank + 1, choiceStart);
+    while (code.length && !code[0].trim()) code.shift();
+    while (code.length && !code[code.length - 1].trim()) code.pop();
+    if (!code.length) return null;
+    return { code, choices: block.slice(choiceStart) };
+  }
+
+  function updateImportPreview(raw) {
+    const parsed = firstProgrammingQuestion(raw);
+    preview.hidden = !parsed;
+    if (!parsed) return;
+    previewLines.replaceChildren();
+    parsed.code.forEach(line => {
+      const item = document.createElement('li');
+      const code = document.createElement('code');
+      code.textContent = line || ' ';
+      item.appendChild(code);
+      previewLines.appendChild(item);
+    });
+    previewChoices.replaceChildren();
+    parsed.choices.forEach(line => {
+      const text = line.match(choicePattern)[1];
+      const row = document.createElement('div');
+      const correct = /\*\s*$/.test(text);
+      row.className = `teacher-choice${correct ? ' is-correct' : ''}`;
+      row.textContent = text.replace(/\s*\*\s*$/, '');
+      if (correct) {
+        const badge = document.createElement('span');
+        badge.textContent = 'Correct';
+        row.appendChild(badge);
+      }
+      previewChoices.appendChild(row);
+    });
+  }
+
+  questionsText.addEventListener('input', () => updateImportPreview(questionsText.value));
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.addEventListener('load', () => updateImportPreview(String(reader.result || '')));
+    reader.readAsText(file);
+  });
+  updateImportPreview(questionsText.value);
+
   document.getElementById('bulk-import-form').addEventListener('submit', function (e) {
     const replaceBox = document.getElementById('{{ form.replace_existing.id_for_label }}');
     if (replaceBox && replaceBox.checked) {

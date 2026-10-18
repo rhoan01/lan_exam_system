@@ -15,8 +15,9 @@ scoring.
 - **Subjects → Exams → Questions** hierarchy. Each exam:
   - Has an **adjustable countdown timer** (set in minutes per exam).
   - Supports up to **100 items** total.
-  - Supports 4 question types: **Multiple Choice, Enumeration,
-    Identification, and Case Analysis** (free-typed answer).
+  - Supports **Multiple Choice, Programming Multiple Choice, True or False,
+    Enumeration, Identification, Matching, Case Analysis, and Image
+    Identification** questions.
 - **Answer key upload** for Enumeration / Identification / Case Analysis
   questions (instructor types the accepted answers/keywords).
 - **Automatic grading** the moment a student submits:
@@ -49,10 +50,10 @@ used anywhere in this project.
 ## Requirements
 
 - Python 3.10+
-- Django 4.2 (see `requirements.txt`)
+- Django 5.2 LTS (5.2.12 or newer; see `requirements.txt`)
 
-This sandbox had no internet access, so the project could not be pip-installed
-or run here — please run the steps below on your own machine.
+Install the dependencies inside a project virtual environment, then run the
+checks and migrations before starting the LAN server.
 
 ## Setup
 
@@ -64,8 +65,7 @@ source venv/bin/activate      # Windows: venv\Scripts\activate
 # 2. Install Django
 pip install -r requirements.txt
 
-# 3. Create the database tables
-python manage.py makemigrations
+# 3. Apply the included database migrations
 python manage.py migrate
 
 # 4. Create your first instructor/admin account
@@ -96,6 +96,8 @@ Then, from any device on the same LAN, browse to:
    - *Enumeration*: type the question, set how many answers are expected,
      then list the accepted answers (answer key), one per line.
    - *Identification*: list accepted answer(s), one per line.
+   - *Image Identification*: upload one numbered image, then enter each
+     number's correct answer, alternates, and points.
    - *Case Analysis*: list key concepts/keywords the answer should contain
      — this is what auto-grades the typed response.
 4. Click **Publish** once ready — only published exams appear to students.
@@ -116,11 +118,11 @@ Then, from any device on the same LAN, browse to:
 
 - All styling/JS is self-hosted (no external CDNs), so it works fully
   offline on a LAN.
-- SQLite is used by default (`db.sqlite3`) — a single file, no separate
-  database server needed. For a busier deployment you can switch
-  `DATABASES` in `examsystem/settings.py` to Postgres/MySQL.
-- Before real deployment: change `SECRET_KEY` in `settings.py`, set
-  `DEBUG = False`, and set `ALLOWED_HOSTS` to your server's LAN IP.
+- SQLite is used by default (`db.sqlite3`) for development. For a busier
+  deployment, set `DB_ENGINE=mysql` and the other values documented in
+  `deployment/.env.example`; no source-code edits are required.
+- Production secrets, `DEBUG`, allowed hosts, and the database connection are
+  supplied through the ignored `deployment/mysql.local.bat` file.
 - Case Analysis grading is keyword-based (a practical approach for
   auto-scoring free text); instructors can still review those specific
   answers via the Django admin (`ExamAttempt` → inline student answers)

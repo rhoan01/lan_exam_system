@@ -1,52 +1,74 @@
 @echo off
+setlocal
 REM ============================================================
-REM Starts the LAN Examination System for real examination use,
-REM served by Waitress (not the Django development server).
-REM
-REM BEFORE FIRST USE: edit the values below (marked EDIT ME) to
-REM match your server. See deployment\README_DEPLOYMENT.md for
-REM the full explanation of each setting.
-REM
-REM Run this from the project root (the folder containing
-REM manage.py), with the virtual environment already created
-REM (see README_DEPLOYMENT.md Section 3).
+REM Starts the LAN Examination System with MySQL and Waitress.
+REM Secrets and machine-specific values live in mysql.local.bat, which
+REM is ignored by Git. Run this file from anywhere or double-click it.
 REM ============================================================
 
-call venv\Scripts\activate.bat
+cd /d "%~dp0.."
 
-REM ---- Core settings (EDIT ME) --------------------------------
-set DJANGO_DEBUG=False
-set DJANGO_SECRET_KEY=CHANGE-THIS-TO-A-LONG-RANDOM-STRING-BEFORE-EXAM-DAY
-set DJANGO_ALLOWED_HOSTS=192.168.0.200,localhost,127.0.0.1
-set DJANGO_CSRF_TRUSTED_ORIGINS=http://192.168.0.200:8000
+if not exist "venv\Scripts\activate.bat" (
+  echo ERROR: venv\Scripts\activate.bat was not found.
+  echo Create the virtual environment and install requirements first.
+  goto :error
+)
+call "venv\Scripts\activate.bat"
 
-REM ---- Database (EDIT ME) -------------------------------------
-REM Leave DB_ENGINE unset (or "sqlite") to keep using SQLite.
-REM Uncomment the block below to use MySQL/MariaDB instead
-REM (recommended for ~160 concurrent students - see README_DEPLOYMENT.md
-REM Section 5).
-REM
-set DB_ENGINE=mysql
-set DB_NAME=examsystem
-set DB_USER=admin_user
-set DB_PASSWORD=Fcu3spp4t2b8
-set DB_HOST=127.0.0.1
-set DB_PORT=3306
+if not exist "deployment\mysql.local.bat" (
+  echo ERROR: deployment\mysql.local.bat was not found.
+  echo Copy deployment\.env.example to deployment\mysql.local.bat,
+  echo then replace every placeholder with this server's values.
+  goto :error
+)
+call "deployment\mysql.local.bat"
+
+if /I not "%DB_ENGINE%"=="mysql" (
+  echo ERROR: DB_ENGINE must be mysql in deployment\mysql.local.bat.
+  goto :error
+)
+
+REM Start the dedicated MySQL 8.4 instance quietly when it is not already
+REM listening. The database binds only to 127.0.0.1; students never connect
+REM to it directly.
+if not defined MYSQLD_EXE (
+  echo ERROR: MYSQLD_EXE is missing from deployment\mysql.local.bat.
+  goto :error
+)
+if not defined MYSQLD_CONFIG (
+  echo ERROR: MYSQLD_CONFIG is missing from deployment\mysql.local.bat.
+  goto :error
+)
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$port = [int]$env:DB_PORT; $ready = Test-NetConnection -ComputerName $env:DB_HOST -Port $port -InformationLevel Quiet -WarningAction SilentlyContinue; if (-not $ready) { if (-not (Test-Path -LiteralPath $env:MYSQLD_EXE)) { Write-Error ('MySQL executable not found: ' + $env:MYSQLD_EXE); exit 1 }; if (-not (Test-Path -LiteralPath $env:MYSQLD_CONFIG)) { Write-Error ('MySQL configuration not found: ' + $env:MYSQLD_CONFIG); exit 1 }; Start-Process -FilePath $env:MYSQLD_EXE -ArgumentList ('--defaults-file=' + $env:MYSQLD_CONFIG),'--standalone' -WorkingDirectory (Split-Path -Parent $env:MYSQLD_EXE) -WindowStyle Hidden; for ($i=0; $i -lt 40; $i++) { Start-Sleep -Milliseconds 500; if (Test-NetConnection -ComputerName $env:DB_HOST -Port $port -InformationLevel Quiet -WarningAction SilentlyContinue) { exit 0 } }; Write-Error ('MySQL did not become ready on port ' + $port + '.'); exit 1 }"
+if errorlevel 1 goto :error
 
 echo.
-echo Applying database migrations...
-python manage.py migrate
+echo Checking application configuration...
+python manage.py check --deploy
+if errorlevel 1 goto :error
+
+echo.
+echo Applying MySQL database migrations...
+python manage.py migrate --noinput
+if errorlevel 1 goto :error
 
 echo.
 echo Collecting static files...
 python manage.py collectstatic --noinput
+if errorlevel 1 goto :error
 
 echo.
-echo Starting Waitress on 0.0.0.0:8000 ...
-echo Students should browse to: http://YOUR-SERVER-LAN-IP:8000/
-echo (the same IP you set in DJANGO_ALLOWED_HOSTS above)
-echo (Press CTRL+C to stop the server once the exam period is over.)
+echo ============================================================
+echo  LAN Examination System is starting on MySQL.
+echo  Local: http://127.0.0.1:8000/
+echo  LAN:   http://%LAN_SERVER_IP%:8000/
+echo  Press CTRL+C to stop the web server.
+echo ============================================================
 echo.
 waitress-serve --listen=0.0.0.0:8000 --threads=8 examsystem.wsgi:application
+goto :eof
 
-pause
+:error
+echo.
+echo The server was NOT started. Review the error above.
+exit /b 1

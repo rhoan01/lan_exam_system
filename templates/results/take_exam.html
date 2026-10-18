@@ -1,35 +1,44 @@
 {% extends 'base.html' %}
-{% block title %}{{ exam.title }} — In Progress{% endblock %}
+{% block title %}{{ exam.title }} — In progress{% endblock %}
+{% block body_class %}exam-page{% endblock %}
 {% block content %}
 
 <div id="fullscreen-gate" class="lockdown-overlay">
   <div class="lockdown-box">
-    <h2 style="margin-top:0;">Ready to begin?</h2>
-    <p>This exam works best in fullscreen mode — it helps prevent accidental exits.</p>
-    <button type="button" id="enter-fullscreen-btn" class="btn btn-accent">Enter Fullscreen &amp; Begin</button>
-    <p class="helptext" style="margin-top:14px;">
-      <a href="#" id="skip-fullscreen-link">Continue without fullscreen</a>
-      (your timer has already started either way)
+    <div class="lockdown-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg></div>
+    <h2>Ready to begin?</h2>
+    <p>Fullscreen helps you stay focused and prevents accidental exits during the assessment.</p>
+    <button type="button" id="enter-fullscreen-btn" class="btn btn-accent btn-lg">Enter fullscreen &amp; begin</button>
+    <p class="helptext" style="margin-top:16px;">
+      <a href="#" id="skip-fullscreen-link">Continue without fullscreen</a><br>
+      Your timer has already started.
     </p>
   </div>
 </div>
 
 <div id="fullscreen-return-gate" class="lockdown-overlay" style="display:none;">
-  <div class="lockdown-box" style="border-color:#c0392b;">
-    <h2 style="margin-top:0; color:#a5322a;">⚠ You left fullscreen mode</h2>
+  <div class="lockdown-box" style="border-color:var(--red-100);">
+    <div class="lockdown-icon" style="color:var(--red-700); background:var(--red-50);"><svg viewBox="0 0 24 24" fill="none"><path d="M12 8v5M12 17h.01"/><path d="M10.3 4.3 2.8 17.2A2 2 0 0 0 4.5 20h15a2 2 0 0 0 1.7-2.8L13.7 4.3a2 2 0 0 0-3.4 0Z"/></svg></div>
+    <h2 style="color:var(--red-700);">Fullscreen was closed</h2>
     <p>This has been recorded. Click below to return and continue your exam.</p>
-    <button type="button" id="return-fullscreen-btn" class="btn btn-danger">Return to Fullscreen</button>
+    <button type="button" id="return-fullscreen-btn" class="btn btn-danger btn-lg">Return to fullscreen</button>
   </div>
 </div>
 
-<div class="card" id="tab-warning-banner" style="display:none; background:#fbe7e7; border-color:#c0392b;">
-  <strong>⚠ Tab switching detected.</strong> Leaving this exam tab is being logged. Please stay on this page until you submit.
+<div class="notice notice-danger" id="tab-warning-banner" style="display:none; margin-bottom:16px;">
+  <strong>Tab switching detected.</strong> Leaving this exam tab is logged. Please stay on this page until you submit.
 </div>
 
-<div class="card">
-  <h2 style="margin:0;">{{ exam.title }}</h2>
-  <p class="muted" style="margin:4px 0 0;">{{ exam.subject.code }} · {{ questions|length }} item(s)</p>
-  {% if exam.instructions %}<p style="margin-top:10px;">{{ exam.instructions|linebreaksbr }}</p>{% endif %}
+<div class="card exam-header">
+  <div class="card-header">
+    <div>
+      <span class="eyebrow">{{ exam.subject.code }} · Assessment in progress</span>
+      <h2>{{ exam.title }}</h2>
+      <p>{{ questions|length }} item{{ questions|length|pluralize }} · Answers save automatically</p>
+    </div>
+    <span class="badge badge-published">In progress</span>
+  </div>
+  {% if exam.instructions %}<div class="notice" style="margin-top:16px;"><strong>Instructions</strong><br>{{ exam.instructions|linebreaksbr }}</div>{% endif %}
 </div>
 
 <form method="post" action="{% url 'results:submit_exam' exam.id %}" id="exam-form">
@@ -46,7 +55,23 @@
           <div class="question-meta">Item {{ forloop.counter }} of {{ questions|length }}</div>
           <h3 style="margin-top:4px;">{{ q.question_text|linebreaksbr }}</h3>
 
-          {% if q.question_type == 'MCQ' or q.question_type == 'TF' %}
+          {% if q.question_type == 'PMCQ' %}
+            <div class="code-editor student-code-editor">
+              <div class="code-titlebar"><span>{{ q.code_language|default:"Code" }}</span><span>Read only</span></div>
+              <ol class="code-lines">
+                {% for line in q.code_lines %}<li><code>{{ line|default:" " }}</code></li>{% endfor %}
+              </ol>
+            </div>
+          {% endif %}
+
+          {% if q.question_type == 'image_identification' %}
+            <button type="button" class="image-zoom-trigger" data-image-src="{{ q.image.url }}" aria-label="Enlarge numbered identification image">
+              <img src="{{ q.image.url }}" alt="Numbered diagram for this question" class="question-image">
+              <span>Click image to enlarge</span>
+            </button>
+          {% endif %}
+
+          {% if q.question_type == 'MCQ' or q.question_type == 'PMCQ' or q.question_type == 'TF' %}
             {% for choice in q.shuffled_choices %}
               <label class="choice-row">
                 <input type="radio" name="question_{{ q.id }}" value="{{ choice.id }}"
@@ -80,6 +105,18 @@
               {% endfor %}
               </tbody>
             </table>
+          {% elif q.question_type == 'image_identification' %}
+            <div class="image-answer-list">
+              {% for number, saved_value in q.image_identification_rows %}
+                <label class="image-answer-row">
+                  <span>{{ number }}.</span>
+                  <input type="text" name="question_{{ q.id }}_item_{{ number }}"
+                         value="{{ saved_value }}" class="answer-input"
+                         data-qindex="{{ forloop.parentloop.counter0 }}"
+                         autocomplete="off" aria-label="Answer for number {{ number }}">
+                </label>
+              {% endfor %}
+            </div>
           {% else %}
             <p class="helptext">Write your case analysis / explanation below.</p>
             <textarea name="question_{{ q.id }}" rows="8" class="answer-input" data-qindex="{{ forloop.counter0 }}">{{ q.saved_text }}</textarea>
@@ -101,19 +138,25 @@
         <div class="helptext" id="autosave-status" style="color:#e8f0fb; margin-top:6px;">Autosave on</div>
       </div>
 
-      <div class="card" style="padding:14px;">
-        <h3 style="margin-top:0; font-size:0.95rem;">Question Navigator</h3>
-        <p class="helptext" style="margin-top:-4px;">Hover to preview, click any number to jump — skip and come back anytime.</p>
+      <div class="card exam-nav-card">
+        <h3>Question navigator</h3>
+        <p class="helptext">Select any number to jump to that item. You can skip and return before submitting.</p>
         <div class="nav-grid" id="nav-grid">
           {% for q in questions %}
             <button type="button" class="nav-btn" data-index="{{ forloop.counter0 }}" data-tip="Item {{ forloop.counter }}">{{ forloop.counter }}</button>
           {% endfor %}
         </div>
-        <button type="submit" class="btn btn-accent" style="width:100%; margin-top:16px;">Submit Exam</button>
+        <div class="exam-legend"><span><i></i>Not answered</span><span><i class="done"></i>Answered</span><span><i class="now"></i>Current</span></div>
+        <button type="submit" class="btn btn-accent" style="width:100%; margin-top:16px;">Submit exam</button>
       </div>
     </div>
   </div>
 </form>
+
+<dialog id="image-lightbox" class="image-lightbox">
+  <button type="button" class="image-lightbox-close" aria-label="Close enlarged image">&times;</button>
+  <img src="" alt="Enlarged numbered diagram">
+</dialog>
 
 <script>
 (function() {
@@ -129,6 +172,18 @@
   const autosaveStatusEl = document.getElementById('autosave-status');
   const tabWarningBanner = document.getElementById('tab-warning-banner');
   const csrfToken = examForm.querySelector('input[name=csrfmiddlewaretoken]').value;
+  const imageLightbox = document.getElementById('image-lightbox');
+
+  document.querySelectorAll('.image-zoom-trigger').forEach(trigger => {
+    trigger.addEventListener('click', () => {
+      imageLightbox.querySelector('img').src = trigger.dataset.imageSrc;
+      imageLightbox.showModal();
+    });
+  });
+  imageLightbox.querySelector('.image-lightbox-close').addEventListener('click', () => imageLightbox.close());
+  imageLightbox.addEventListener('click', event => {
+    if (event.target === imageLightbox) imageLightbox.close();
+  });
 
   // ---------------- Shared state ----------------
   let currentIndex = {{ resume_index }};

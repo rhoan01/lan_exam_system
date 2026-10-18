@@ -1,19 +1,15 @@
 {% extends 'base.html' %}
-{% block title %}New Subject{% endblock %}
+{% block title %}New subject{% endblock %}
 {% block content %}
-<div class="card" style="max-width:480px;">
-  <h2>New Subject</h2>
+<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="{% url 'exams:instructor_dashboard' %}">Dashboard</a><span aria-hidden="true">/</span><span>New subject</span></nav>
+<div class="card form-card">
+  <div class="form-intro"><span class="eyebrow">Course setup</span><h1>Create a subject</h1><p class="muted">Use the official subject code and title students recognize.</p></div>
   <form method="post" novalidate>
     {% csrf_token %}
     {% for field in form %}
-      <p>
-        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-        {{ field }}
-        {% for error in field.errors %}<div class="helptext" style="color:#a5322a;">{{ error }}</div>{% endfor %}
-      </p>
+      <p><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<span class="field-error">{{ error }}</span>{% endfor %}</p>
     {% endfor %}
-    <button type="submit" class="btn btn-accent">Save</button>
-    <a href="{% url 'exams:instructor_dashboard' %}" class="btn btn-secondary">Cancel</a>
+    <div class="form-actions"><button type="submit" class="btn btn-accent">Create subject</button><a href="{% url 'exams:instructor_dashboard' %}" class="btn btn-secondary">Cancel</a></div>
   </form>
 </div>
 {% endblock %}

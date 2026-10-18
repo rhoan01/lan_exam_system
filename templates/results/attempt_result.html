@@ -1,14 +1,15 @@
 {% extends 'base.html' %}
 {% block title %}Result — {{ attempt.exam.title }}{% endblock %}
 {% block content %}
-<div class="card score-hero">
-  <p class="muted" style="margin:0;">{{ attempt.exam.subject.code }} · {{ attempt.exam.title }}</p>
-  <div class="big">{{ attempt.score|floatformat:0 }} / {{ attempt.total_points|floatformat:0 }}</div>
-  <p style="font-size:1.1rem;">{{ attempt.percentage }}%</p>
-  <p class="muted">Submitted {{ attempt.submitted_at|date:"M d, Y H:i" }}</p>
-</div>
-
-<div class="card" style="text-align:center;">
-  <a href="{% url 'results:student_dashboard' %}" class="btn btn-secondary">&larr; Back to Dashboard</a>
+<div style="max-width:720px; margin:0 auto;">
+  <div class="card score-hero">
+    <span class="eyebrow" style="color:#9db9fb;">Exam submitted</span>
+    <h1 style="color:white;">{{ attempt.exam.title }}</h1>
+    <p class="muted">{{ attempt.exam.subject.code }} · Final score</p>
+    <div class="big">{{ attempt.score|floatformat:0 }} / {{ attempt.total_points|floatformat:0 }}</div>
+    <div class="score-ring">{{ attempt.percentage }}%</div>
+    <p class="muted" style="margin:18px 0 0;">Submitted {{ attempt.submitted_at|date:"M d, Y · H:i" }}</p>
+  </div>
+  <div class="card" style="text-align:center;"><h3>You're all done</h3><p class="muted">Your result has been saved and is available from your dashboard.</p><a href="{% url 'results:student_dashboard' %}" class="btn btn-accent">Return to dashboard</a></div>
 </div>
 {% endblock %}

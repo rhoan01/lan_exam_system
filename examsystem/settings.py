@@ -33,6 +33,8 @@ Environment variables recognized (all optional; sensible dev defaults if unset):
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
@@ -127,6 +129,12 @@ WSGI_APPLICATION = 'examsystem.wsgi.application'
 #     deployment/README_DEPLOYMENT.md for why, and for setup steps).
 DB_ENGINE = os.environ.get('DB_ENGINE', 'sqlite').strip().lower()
 
+if DB_ENGINE not in {'sqlite', 'mysql'}:
+    raise ImproperlyConfigured(
+        'DB_ENGINE must be either "sqlite" or "mysql"; '
+        f'received {DB_ENGINE!r}.'
+    )
+
 if DB_ENGINE == 'mysql':
     # PyMySQL is a pure-Python MySQL driver: no C build tools needed on
     # Windows Server, unlike mysqlclient. It's registered here to act as
@@ -134,21 +142,29 @@ if DB_ENGINE == 'mysql':
     import pymysql
     pymysql.install_as_MySQLdb()
 
+    db_password = os.environ.get('DB_PASSWORD', '')
+    if not db_password:
+        raise ImproperlyConfigured(
+            'DB_PASSWORD must be set when DB_ENGINE=mysql.'
+        )
+
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.mysql',
             'NAME': os.environ.get('DB_NAME', 'examsystem'),
             'USER': os.environ.get('DB_USER', 'examsystem_user'),
-            'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+            'PASSWORD': db_password,
             'HOST': os.environ.get('DB_HOST', '127.0.0.1'),
             'PORT': os.environ.get('DB_PORT', '3306'),
             'OPTIONS': {
                 'charset': 'utf8mb4',
+                'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
             },
             # Keep a small pool of persistent connections alive between
             # requests instead of reconnecting every time — meaningful at
             # ~160 concurrent users. 60 seconds is a safe, conservative value.
             'CONN_MAX_AGE': 60,
+            'CONN_HEALTH_CHECKS': True,
         }
     }
 else:
@@ -176,10 +192,19 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-# Simple, dependency-free static file storage: compresses files but does not
-# require a strict manifest (which can break local dev if collectstatic
-# hasn't been run yet).
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+# Django 5.1 removed the legacy STATICFILES_STORAGE setting. Configure both
+# default and static-file backends through STORAGES instead. WhiteNoise's
+# non-manifest backend keeps local development usable before collectstatic.
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage',
+    },
+}
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

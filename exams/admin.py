@@ -1,5 +1,8 @@
 from django.contrib import admin
-from .models import Subject, Exam, Question, Choice, AnswerKey, MatchingPair, MatchingDistractor
+from .models import (
+    Subject, Exam, Question, Choice, AnswerKey, MatchingPair, MatchingDistractor,
+    ImageIdentificationItem,
+)
 
 
 class ChoiceInline(admin.TabularInline):
@@ -17,6 +20,11 @@ class MatchingDistractorInline(admin.TabularInline):
     extra = 1
 
 
+class ImageIdentificationItemInline(admin.TabularInline):
+    model = ImageIdentificationItem
+    extra = 1
+
+
 @admin.register(Subject)
 class SubjectAdmin(admin.ModelAdmin):
     list_display = ('code', 'name', 'instructor')
@@ -31,10 +39,14 @@ class ExamAdmin(admin.ModelAdmin):
 @admin.register(Question)
 class QuestionAdmin(admin.ModelAdmin):
     list_display = ('exam', 'order', 'question_type', 'question_text', 'points')
-    inlines = [ChoiceInline, MatchingPairInline, MatchingDistractorInline]
+    inlines = [
+        ChoiceInline, MatchingPairInline, MatchingDistractorInline,
+        ImageIdentificationItemInline,
+    ]
 
 
 admin.site.register(Choice)
 admin.site.register(AnswerKey)
 admin.site.register(MatchingPair)
 admin.site.register(MatchingDistractor)
+admin.site.register(ImageIdentificationItem)

@@ -1,25 +1,27 @@
 {% extends 'base.html' %}
 {% block title %}Edit Question{% endblock %}
 {% block content %}
-<div class="card" style="max-width:680px;">
-  <h2>Edit Question — {{ exam.title }}</h2>
-  <p class="muted">
-    Type: <strong>{{ question.get_question_type_display }}</strong>
-    <span class="helptext">(the question type itself can't be changed after creation — delete and re-add it if you need a different type)</span>
-  </p>
+<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="{% url 'exams:exam_detail' exam.id %}">{{ exam.title }}</a><span aria-hidden="true">/</span><span>Edit question {{ question.order }}</span></nav>
+<div class="card form-card">
+  <div class="form-intro"><span class="eyebrow">Question builder</span><h1>Edit question {{ question.order }}</h1><p class="muted"><span class="qtype-tag">{{ question.get_question_type_display }}</span> The question type is locked after creation to protect existing answer data.</p></div>
 
-  <form method="post" novalidate id="question-edit-form">
+  <form method="post" enctype="multipart/form-data" novalidate id="question-edit-form">
     {% csrf_token %}
 
     <p>
       <label for="{{ form.question_text.id_for_label }}">Question Text</label>
       {{ form.question_text }}
-      {% for error in form.question_text.errors %}<div class="helptext" style="color:#a5322a;">{{ error }}</div>{% endfor %}
+      {% for error in form.question_text.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
     </p>
-    <p>
-      <label for="{{ form.points.id_for_label }}">Points</label>
-      {{ form.points }}
-    </p>
+    {% if question.question_type == 'image_identification' %}
+      {{ form.points.as_hidden }}
+      <p><strong>Total points:</strong> {{ question.points }} <span class="helptext">Calculated from the numbered items.</span></p>
+    {% else %}
+      <p>
+        <label for="{{ form.points.id_for_label }}">Points</label>
+        {{ form.points }}
+      </p>
+    {% endif %}
     {% if question.question_type == 'ENUM' %}
       <p>
         <label for="{{ form.expected_answer_count.id_for_label }}">Expected number of answers</label>
@@ -27,13 +29,35 @@
       </p>
     {% endif %}
 
-    {% if question.question_type == 'MCQ' %}
-      <div style="border-top:1px solid #dbe1e8; padding-top:14px; margin-top:10px;">
-        <h3 style="margin-top:0;">Answer Choices</h3>
+    {% if question.question_type == 'PMCQ' %}
+      <div class="form-section">
+        <h3>Code</h3>
+        <p class="helptext">Indentation and blank lines are preserved. The language is an optional display label.</p>
+        <p><label for="{{ form.code_language.id_for_label }}">Language (optional)</label>{{ form.code_language }}</p>
+        <p>
+          <label for="{{ form.code_snippet.id_for_label }}">Code snippet</label>
+          {{ form.code_snippet }}
+          {% for error in form.code_snippet.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+        </p>
+        <div class="code-preview-wrap">
+          <span class="helptext">Live student preview</span>
+          <div class="code-editor">
+            <div class="code-titlebar"><span data-code-language>{{ question.code_language|default:"Code" }}</span><span>Read only</span></div>
+            <ol class="code-lines" data-code-lines>
+              {% for line in question.code_lines %}<li><code>{{ line|default:" " }}</code></li>{% endfor %}
+            </ol>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
+    {% if question.question_type == 'MCQ' or question.question_type == 'PMCQ' %}
+      <div class="form-section">
+        <h3>Answer choices</h3>
         <p class="helptext">Check the box next to the correct choice. Check "Delete" on a row to remove that choice, or fill in a blank row to add a new one.</p>
         {{ choice_formset.management_form }}
         {% for cform in choice_formset %}
-          <div class="choice-row">
+          <div class="choice-row teacher-choice-row">
             {{ cform.id }}
             {{ cform.choice_text }}
             <label style="display:flex; align-items:center; gap:4px; margin:0; font-weight:400; white-space:nowrap;">
@@ -49,8 +73,8 @@
       </div>
 
     {% elif question.question_type == 'TF' %}
-      <div style="border-top:1px solid #dbe1e8; padding-top:14px; margin-top:10px;">
-        <h3 style="margin-top:0;">Correct Answer</h3>
+      <div class="form-section">
+        <h3>Correct answer</h3>
         <label class="choice-row">
           <input type="radio" name="tf_correct_answer" value="True" {% if tf_current_answer == 'True' %}checked{% endif %}> True
         </label>
@@ -60,8 +84,8 @@
       </div>
 
     {% elif question.question_type == 'MATCH' %}
-      <div style="border-top:1px solid #dbe1e8; padding-top:14px; margin-top:10px;">
-        <h3 style="margin-top:0;">Column A / Column B Pairs</h3>
+      <div class="form-section">
+        <h3>Column A / Column B pairs</h3>
         <p class="helptext">Check "Delete" on a row to remove that pair, or fill in a blank row to add a new one. Need at least 2 complete rows.</p>
         {{ pair_formset.management_form }}
         {% for pform in pair_formset %}
@@ -83,9 +107,14 @@
         {{ distractor_form.distractors_text }}
       </div>
 
+    {% elif question.question_type == 'image_identification' %}
+      <div class="form-section">
+        {% include 'exams/_image_identification_editor.html' %}
+      </div>
+
     {% else %}
-      <div style="border-top:1px solid #dbe1e8; padding-top:14px; margin-top:10px;">
-        <h3 style="margin-top:0;">Answer Key</h3>
+      <div class="form-section">
+        <h3>Answer key</h3>
         <p class="helptext">
           {% if question.question_type == 'IDENT' %}Enter the accepted answer(s), one per line.
           {% elif question.question_type == 'ENUM' %}Enter each expected answer on its own line.
@@ -95,10 +124,36 @@
       </div>
     {% endif %}
 
-    <div style="margin-top:18px;">
-      <button type="submit" class="btn btn-accent">Save Changes</button>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-accent">Save changes</button>
       <a href="{% url 'exams:exam_detail' exam.id %}" class="btn btn-secondary">Cancel</a>
     </div>
   </form>
 </div>
+{% if question.question_type == 'PMCQ' %}
+<script>
+  (function () {
+    const codeInput = document.getElementById('{{ form.code_snippet.id_for_label }}');
+    const languageInput = document.getElementById('{{ form.code_language.id_for_label }}');
+    const previewLines = document.querySelector('[data-code-lines]');
+    const previewLanguage = document.querySelector('[data-code-language]');
+
+    function updateCodePreview() {
+      previewLines.replaceChildren();
+      (codeInput.value || 'Code preview').split('\n').forEach(line => {
+        const item = document.createElement('li');
+        const code = document.createElement('code');
+        code.textContent = line || ' ';
+        item.appendChild(code);
+        previewLines.appendChild(item);
+      });
+      previewLanguage.textContent = languageInput.value.trim() || 'Code';
+    }
+
+    codeInput.addEventListener('input', updateCodePreview);
+    languageInput.addEventListener('input', updateCodePreview);
+    updateCodePreview();
+  }());
+</script>
+{% endif %}
 {% endblock %}

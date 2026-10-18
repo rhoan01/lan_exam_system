@@ -1,24 +1,18 @@
 {% extends 'base.html' %}
-{% block title %}{% if exam %}Edit Exam{% else %}New Exam{% endif %}{% endblock %}
+{% block title %}{% if exam %}Edit exam{% else %}New exam{% endif %}{% endblock %}
 {% block content %}
-<div class="card" style="max-width:560px;">
-  <h2>{% if exam %}Edit Exam — {{ exam.title }}{% else %}New Exam — {{ subject.code }}{% endif %}</h2>
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="{% url 'exams:instructor_dashboard' %}">Dashboard</a><span aria-hidden="true">/</span>
+  {% if exam %}<a href="{% url 'exams:exam_detail' exam.id %}">{{ exam.title }}</a>{% else %}<a href="{% url 'exams:subject_detail' subject.id %}">{{ subject.code }}</a>{% endif %}<span aria-hidden="true">/</span><span>{% if exam %}Settings{% else %}New exam{% endif %}</span>
+</nav>
+<div class="card form-card">
+  <div class="form-intro"><span class="eyebrow">Assessment setup</span><h1>{% if exam %}Edit exam settings{% else %}Create an exam{% endif %}</h1><p class="muted">{% if exam %}Update delivery, availability, and question randomization for {{ exam.title }}.{% else %}Configure the assessment for {{ subject.code }}. You can add questions on the next screen.{% endif %}</p></div>
   <form method="post" novalidate>
     {% csrf_token %}
     {% for field in form %}
-      <p>
-        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-        {{ field }}
-        {% if field.help_text %}<div class="helptext">{{ field.help_text }}</div>{% endif %}
-        {% for error in field.errors %}<div class="helptext" style="color:#a5322a;">{{ error }}</div>{% endfor %}
-      </p>
+      <p><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}{% for error in field.errors %}<span class="field-error">{{ error }}</span>{% endfor %}</p>
     {% endfor %}
-    <button type="submit" class="btn btn-accent">{% if exam %}Save Changes{% else %}Create Exam{% endif %}</button>
-    {% if exam %}
-      <a href="{% url 'exams:exam_detail' exam.id %}" class="btn btn-secondary">Cancel</a>
-    {% else %}
-      <a href="{% url 'exams:subject_detail' subject.id %}" class="btn btn-secondary">Cancel</a>
-    {% endif %}
+    <div class="form-actions"><button type="submit" class="btn btn-accent">{% if exam %}Save changes{% else %}Create exam{% endif %}</button>{% if exam %}<a href="{% url 'exams:exam_detail' exam.id %}" class="btn btn-secondary">Cancel</a>{% else %}<a href="{% url 'exams:subject_detail' subject.id %}" class="btn btn-secondary">Cancel</a>{% endif %}</div>
   </form>
 </div>
 {% endblock %}

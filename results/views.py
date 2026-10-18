@@ -4,13 +4,13 @@ import string
 
 from django.contrib import messages
 from django.db import transaction, IntegrityError
-from django.db.models import F
+from django.db.models import F, Prefetch
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 
 from accounts.decorators import student_required
-from exams.models import Exam, Question
+from exams.models import Exam, Question, ImageIdentificationItem
 
 from .grading import grade_answer
 from .models import ExamAttempt, StudentAnswer, ExamAccessGrant
@@ -85,7 +85,14 @@ def _save_answers_from_post(exam, attempt, post_data):
     present in post_data for this exam's questions, without grading. Only
     writes fields that actually changed, to keep autosave cheap when called
     frequently."""
-    questions = list(exam.questions.prefetch_related('choices', 'matching_pairs'))
+    student_image_items = Prefetch(
+        'image_identification_items',
+        queryset=ImageIdentificationItem.objects.only('id', 'question_id', 'number'),
+        to_attr='student_image_items',
+    )
+    questions = list(exam.questions.prefetch_related(
+        'choices', 'matching_pairs', student_image_items,
+    ))
     existing_answers = {a.question_id: a for a in attempt.answers.all()}
 
     to_create = []
@@ -96,7 +103,7 @@ def _save_answers_from_post(exam, attempt, post_data):
         selected_choice = None
         text_answer = ''
 
-        if question.question_type in (Question.MCQ, Question.TF):
+        if question.question_type in (Question.MCQ, Question.PROGRAMMING_MCQ, Question.TF):
             choice_id = post_data.get(field_name)
             if choice_id:
                 for c in question.choices.all():
@@ -111,6 +118,13 @@ def _save_answers_from_post(exam, attempt, post_data):
                 value = post_data.get(f'{field_name}_pair_{pair.id}', '').strip()
                 if value:
                     answer_map[str(pair.id)] = value
+            text_answer = json.dumps(answer_map)
+        elif question.question_type == Question.IMAGE_IDENTIFICATION:
+            answer_map = {}
+            for item in question.student_image_items:
+                value = post_data.get(f'{field_name}_item_{item.number}', '').strip()
+                if value:
+                    answer_map[str(item.number)] = value
             text_answer = json.dumps(answer_map)
         else:
             text_answer = post_data.get(field_name, '')
@@ -143,7 +157,7 @@ def _auto_grade_and_submit(attempt):
     (with their selected choice preloaded), one bulk_update for the graded
     answers, and one save for the attempt itself.
     """
-    questions = list(attempt.exam.questions.all())
+    questions = list(attempt.exam.questions.prefetch_related('image_identification_items'))
     total_points = sum(q.points for q in questions)
 
     answers_by_qid = {a.question_id: a for a in attempt.answers.select_related('selected_choice')}
@@ -204,7 +218,14 @@ def take_exam(request, exam_id):
         messages.info(request, "Time was already up for this exam; it has been auto-submitted.")
         return redirect('results:attempt_result', attempt_id=attempt.id)
 
-    questions = list(exam.questions.prefetch_related('choices', 'matching_pairs', 'matching_distractors'))
+    student_image_items = Prefetch(
+        'image_identification_items',
+        queryset=ImageIdentificationItem.objects.only('id', 'question_id', 'number'),
+        to_attr='student_image_items',
+    )
+    questions = list(exam.questions.prefetch_related(
+        'choices', 'matching_pairs', 'matching_distractors', student_image_items,
+    ))
 
     # Randomize order deterministically per attempt (seeded on the attempt's
     # own id), so each student sees a consistent, stable order across
@@ -222,7 +243,7 @@ def take_exam(request, exam_id):
         q.saved_choice_id = existing.selected_choice_id if existing else None
         q.saved_text = existing.text_answer if existing else ''
 
-        if q.question_type in (Question.MCQ, Question.TF):
+        if q.question_type in (Question.MCQ, Question.PROGRAMMING_MCQ, Question.TF):
             choice_list = list(q.choices.all())
             if exam.shuffle_choices:
                 random.Random(f'{attempt.id}-{q.id}').shuffle(choice_list)
@@ -244,6 +265,20 @@ def take_exam(request, exam_id):
                     saved_map = {}
             q.matching_rows = [
                 (pair, saved_map.get(str(pair.id), '')) for pair in q.matching_pairs.all()
+            ]
+
+        elif q.question_type == Question.IMAGE_IDENTIFICATION:
+            saved_map = {}
+            if existing and existing.text_answer:
+                try:
+                    parsed = json.loads(existing.text_answer)
+                    if isinstance(parsed, dict):
+                        saved_map = parsed
+                except (ValueError, TypeError):
+                    saved_map = {}
+            q.image_identification_rows = [
+                (item.number, saved_map.get(str(item.number), ''))
+                for item in q.student_image_items
             ]
 
     # Resume on the same item the student had open before - whether that's

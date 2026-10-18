@@ -1,60 +1,46 @@
 {% extends 'base.html' %}
-{% block title %}Student Dashboard{% endblock %}
+{% block title %}Student dashboard{% endblock %}
 {% block content %}
-<div class="card">
-  <h2>Available Exams</h2>
+<section class="hero-panel" style="margin-bottom:20px;">
+  <span class="eyebrow">Student workspace</span>
+  <div class="page-header" style="margin:0; align-items:center;">
+    <div class="page-header-copy"><h1>Hello, {{ user.first_name|default:user.username }}.</h1><p class="page-subtitle">Review your available assessments, continue with confidence, and keep track of completed work.</p></div>
+    {% if user.student_profile %}<div class="badge badge-neutral" style="background:rgba(255,255,255,.12); color:#e7edf8;">{{ user.student_profile.course }} · {{ user.student_profile.year_level }} · Section {{ user.student_profile.section }}</div>{% endif %}
+  </div>
+</section>
+<div class="stats-grid">
+  <div class="stat-card"><div class="stat-label">Available exams <span class="stat-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M6 3h9l4 4v14H6V3Z"/><path d="M14 3v5h5M9 12h7M9 16h5"/></svg></span></div><span class="stat-value">{{ available_exams|length }}</span></div>
+  <div class="stat-card"><div class="stat-label">Completed <span class="stat-icon" style="color:var(--green-700); background:var(--green-50);"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5 9.5 17 19 7.5"/></svg></span></div><span class="stat-value">{{ completed_attempts|length }}</span></div>
+  <div class="stat-card"><div class="stat-label">Exam access <span class="stat-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M8 11V8a4 4 0 0 1 8 0v3M5 11h14v10H5V11Z"/></svg></span></div><span class="stat-value" style="font-size:1.15rem; letter-spacing:-.02em; color:var(--green-700);">Secure</span></div>
+</div>
+<section class="card">
+  <div class="card-header"><div><span class="eyebrow">Ready when you are</span><h2>Available exams</h2><p>Check the subject and time limit before starting. Your timer begins when you open an exam.</p></div></div>
   {% if available_exams %}
-    <table>
-      <thead><tr><th>Subject</th><th>Exam</th><th>Items</th><th>Time Limit</th><th></th></tr></thead>
-      <tbody>
+    <div class="item-grid">
       {% for exam in available_exams %}
-        <tr>
-          <td>{{ exam.subject.code }}</td>
-          <td>{{ exam.title }}</td>
-          <td>{{ exam.total_items }}</td>
-          <td>{{ exam.time_limit_minutes }} min</td>
-          <td><a class="btn btn-accent btn-sm" href="{% url 'results:take_exam' exam.id %}">Start Exam</a></td>
-        </tr>
+        <article class="item-card">
+          <div class="item-card-top"><div><div class="item-kicker">{{ exam.subject.code }}</div><h3>{{ exam.title }}</h3></div><span class="badge badge-published">Available</span></div>
+          <div class="meta-list"><span class="meta-item"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>{{ exam.time_limit_minutes }} minutes</span><span class="meta-item"><svg viewBox="0 0 24 24" fill="none"><path d="M6 3h9l4 4v14H6V3Z"/><path d="M14 3v5h5"/></svg>{{ exam.total_items }} items</span></div>
+          <div class="item-card-footer"><span class="muted" style="font-size:.76rem;">Make sure you have a stable connection.</span><a class="btn btn-accent btn-sm" href="{% url 'results:take_exam' exam.id %}">Start exam</a></div>
+        </article>
       {% endfor %}
-      </tbody>
-    </table>
+    </div>
   {% else %}
-    <p class="muted">No new exams available right now.</p>
+    <div class="empty-state"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M6 3h9l4 4v14H6V3Z"/><path d="M14 3v5h5M9 13l2 2 4-4"/></svg></div><h3>You're all caught up</h3><p>No new exams are assigned to your year level and section right now.</p></div>
   {% endif %}
-</div>
-
-<div class="card">
-  <h3 style="margin-top:0;">Have an Access Code?</h3>
-  <p class="muted" style="margin-top:-6px;">
-    If an instructor gave you a code to unlock an exam not normally shown to
-    your year level, enter it below.
-  </p>
-  <form method="post" action="{% url 'results:redeem_access_code' %}" style="display:flex; gap:10px; max-width:360px;">
-    {% csrf_token %}
-    <input type="text" name="access_code" placeholder="Enter access code" style="text-transform:uppercase;" maxlength="12">
-    <button type="submit" class="btn btn-accent" style="white-space:nowrap;">Unlock Exam</button>
-  </form>
-</div>
-
-<div class="card">
-  <h2>My Results</h2>
+</section>
+<section class="card">
+  <div class="card-header"><div><span class="eyebrow">Special access</span><h3>Have an access code?</h3><p>Use a code from your instructor to unlock an additional exam.</p></div></div>
+  <form method="post" action="{% url 'results:redeem_access_code' %}" class="inline-actions" style="max-width:520px;">{% csrf_token %}<input type="text" name="access_code" placeholder="Enter 8-character code" style="text-transform:uppercase;" maxlength="12" aria-label="Exam access code"><button type="submit" class="btn btn-secondary" style="white-space:nowrap;">Unlock exam</button></form>
+</section>
+<section class="card">
+  <div class="card-header"><div><span class="eyebrow">Performance</span><h2>My results</h2><p>Your submitted exams and final scores.</p></div></div>
   {% if completed_attempts %}
-    <table>
-      <thead><tr><th>Subject</th><th>Exam</th><th>Score</th><th>%</th><th></th></tr></thead>
-      <tbody>
-      {% for attempt in completed_attempts %}
-        <tr>
-          <td>{{ attempt.exam.subject.code }}</td>
-          <td>{{ attempt.exam.title }}</td>
-          <td>{{ attempt.score|floatformat:0 }} / {{ attempt.total_points|floatformat:0 }}</td>
-          <td>{{ attempt.percentage }}%</td>
-          <td><a href="{% url 'results:attempt_result' attempt.id %}">View →</a></td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-wrap responsive-table"><table><thead><tr><th>Subject</th><th>Exam</th><th>Score</th><th>Percentage</th><th></th></tr></thead><tbody>
+      {% for attempt in completed_attempts %}<tr><td data-label="Subject"><strong>{{ attempt.exam.subject.code }}</strong></td><td data-label="Exam">{{ attempt.exam.title }}</td><td data-label="Score">{{ attempt.score|floatformat:0 }} / {{ attempt.total_points|floatformat:0 }}</td><td data-label="Percentage"><span class="badge {% if attempt.percentage >= 75 %}badge-published{% else %}badge-warning{% endif %}">{{ attempt.percentage }}%</span></td><td data-label=""><a class="table-link" href="{% url 'results:attempt_result' attempt.id %}">View result</a></td></tr>{% endfor %}
+    </tbody></table></div>
   {% else %}
-    <p class="muted">You haven't completed any exams yet.</p>
+    <div class="empty-state"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M4 19V9M10 19V5M16 19v-7M3 19h18"/></svg></div><h3>No results yet</h3><p>Your scores will appear here after you submit your first exam.</p></div>
   {% endif %}
-</div>
+</section>
 {% endblock %}

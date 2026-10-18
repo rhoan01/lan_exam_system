@@ -29,8 +29,8 @@ about the existing UI or functionality changes.
 1. **Windows Server 2019**
 2. **Python 3.10+** (from python.org) — during install, check "Add python.exe
    to PATH".
-3. **MySQL Server** or **MariaDB Server** (either works — Django talks to
-   both through the same MySQL driver).
+3. **MySQL 8.0.11+** or **MariaDB 10.5+**. Older bundled database servers
+   (including XAMPP MariaDB 10.4) are not supported by Django 5.2.
 4. A **Gigabit LAN switch** connecting the server and student PCs.
 
 ---
@@ -84,17 +84,17 @@ FLUSH PRIVILEGES;
 
 ### Pointing Django at it
 
-Set these environment variables before running `manage.py` (the
-`deploy\start_exam_server.bat` script already does this for you — just edit
-the values at the top of that file once):
+Copy `deployment\.env.example` to the ignored
+`deployment\mysql.local.bat` file and set these values. Both maintained
+launchers load that private file automatically:
 
 ```bat
-set DJANGO_DB_ENGINE=mysql
-set DJANGO_DB_NAME=examsystem
-set DJANGO_DB_USER=examsystem_user
-set DJANGO_DB_PASSWORD=choose-a-strong-password
-set DJANGO_DB_HOST=127.0.0.1
-set DJANGO_DB_PORT=3306
+set DB_ENGINE=mysql
+set DB_NAME=examsystem
+set DB_USER=examsystem_user
+set DB_PASSWORD=choose-a-strong-password
+set DB_HOST=127.0.0.1
+set DB_PORT=3306
 ```
 
 If these variables are **not** set, the app automatically falls back to
@@ -102,11 +102,9 @@ SQLite — nothing breaks for local development.
 
 ### Migrating
 
-This project has no existing migration history yet, so the first-time setup
-is simply:
+The project already includes its migration history. On first-time setup run:
 
 ```bat
-python manage.py makemigrations
 python manage.py migrate
 python manage.py create_instructor <username> <password>
 ```
@@ -133,8 +131,8 @@ optional — sensible development defaults are used if unset):
 | `DJANGO_SECRET_KEY` | Random secret, keep private | (long random string) |
 | `DJANGO_ALLOWED_HOSTS` | Comma-separated hosts allowed to connect | `192.168.1.10,localhost,127.0.0.1` |
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | Only needed if using HTTPS or a hostname | `http://examserver:8000` |
-| `DJANGO_DB_ENGINE` | `mysql` or leave unset for SQLite | `mysql` |
-| `DJANGO_DB_NAME` / `_USER` / `_PASSWORD` / `_HOST` / `_PORT` | MySQL/MariaDB connection | see above |
+| `DB_ENGINE` | `mysql` or leave unset for SQLite | `mysql` |
+| `DB_NAME` / `DB_USER` / `DB_PASSWORD` / `DB_HOST` / `DB_PORT` | MySQL/MariaDB connection | see above |
 
 **`ALLOWED_HOSTS`** must include the server's LAN IP address (or `*` during
 testing) or Django will reject requests from student PCs with a
@@ -209,7 +207,7 @@ to the public Internet.
 Before every examination, take a backup:
 
 ```bat
-python manage.py backup_exam_data
+python manage.py backup_data
 ```
 
 This uses Django's own data export (works identically for SQLite and
@@ -224,8 +222,8 @@ To restore a backup:
 python manage.py loaddata backups\exam_backup_20260101_080000.json
 ```
 
-`deploy\backup_before_exam.bat` runs this for you with one double-click —
-edit the database values at the top once, matching `start_exam_server.bat`.
+`deploy\backup_before_exam.bat` runs this for you with one double-click and
+loads the same ignored `deployment\mysql.local.bat` configuration.
 
 The backup command never deletes existing data — it only reads and exports.
 Avoid restoring a backup, running `migrate`, or making other destructive
@@ -235,9 +233,12 @@ database changes while an examination is actively in progress.
 
 ## 9. Starting and Stopping the System
 
-**Before the exam:** double-click `deploy\start_exam_server.bat` (after
-editing the IP/password values inside it once). Leave the Command Prompt
-window open — closing it stops the server.
+**One-time network setup:** double-click
+`deployment\configure_firewall_admin.bat` and accept the Administrator
+prompt. It limits TCP 8000 access to the local subnet.
+
+**Before the exam:** double-click `deploy\start_exam_server.bat`. Leave the
+Command Prompt window open — closing it stops the web server.
 
 **After the exam:** press `Ctrl+C` in that Command Prompt window, or simply
 close the window.

@@ -1,7 +1,8 @@
 """
 Auto-grading engine for the LAN Examination System.
 
-- Multiple Choice / True-or-False: exact match against the choice marked correct.
+- Multiple Choice / Programming Multiple Choice / True-or-False: exact match
+  against the choice marked correct.
 - Identification: case-insensitive / whitespace-insensitive match against
   any of the accepted answers in the instructor's answer key.
 - Enumeration: the student's answer (one item per line, or comma
@@ -13,14 +14,25 @@ Auto-grading engine for the LAN Examination System.
 - Matching Type: the student's submitted {pair_id: chosen_text} mapping
   (stored as JSON) is compared against each pair's correct right_text.
   Partial credit proportional to how many pairs were matched correctly.
+- Image Identification: the student's submitted {number: answer} mapping is
+  matched per numbered item, with each item awarding its own point value.
 """
 import json
 
 from exams.models import Question
 
 
-def _normalize(text):
+def normalize_answer(text):
     return ' '.join(text.strip().lower().split())
+
+
+def matches_accepted_answer(student_answer, accepted_answers):
+    normalized_student = normalize_answer(student_answer or '')
+    if not normalized_student:
+        return False
+    return normalized_student in {
+        normalize_answer(answer) for answer in accepted_answers if normalize_answer(answer)
+    }
 
 
 def grade_mcq(question, selected_choice):
@@ -32,8 +44,9 @@ def grade_mcq(question, selected_choice):
 def grade_identification(question, text_answer):
     if not hasattr(question, 'answer_key'):
         return 0
-    accepted = [_normalize(a) for a in question.answer_key.answers_list()]
-    return question.points if _normalize(text_answer or '') in accepted else 0
+    return question.points if matches_accepted_answer(
+        text_answer, question.answer_key.answers_list()
+    ) else 0
 
 
 def _split_student_items(text_answer):
@@ -44,10 +57,10 @@ def _split_student_items(text_answer):
 def grade_enumeration(question, text_answer):
     if not hasattr(question, 'answer_key'):
         return 0
-    expected = [_normalize(a) for a in question.answer_key.answers_list()]
+    expected = [normalize_answer(a) for a in question.answer_key.answers_list()]
     if not expected:
         return 0
-    given = [_normalize(a) for a in _split_student_items(text_answer)]
+    given = [normalize_answer(a) for a in _split_student_items(text_answer)]
     matches = 0
     remaining = list(expected)
     for item in given:
@@ -61,10 +74,10 @@ def grade_enumeration(question, text_answer):
 def grade_case_analysis(question, text_answer):
     if not hasattr(question, 'answer_key'):
         return 0
-    keywords = [_normalize(a) for a in question.answer_key.answers_list()]
+    keywords = [normalize_answer(a) for a in question.answer_key.answers_list()]
     if not keywords:
         return 0
-    normalized_answer = _normalize(text_answer or '')
+    normalized_answer = normalize_answer(text_answer or '')
     matched = sum(1 for kw in keywords if kw and kw in normalized_answer)
     ratio = matched / len(keywords)
     return round(ratio * question.points)
@@ -89,15 +102,51 @@ def grade_matching(question, text_answer):
     matches = 0
     for pair in pairs:
         chosen = submitted.get(str(pair.id), '')
-        if _normalize(chosen) == _normalize(pair.right_text):
+        if normalize_answer(chosen) == normalize_answer(pair.right_text):
             matches += 1
     ratio = matches / len(pairs)
     return round(ratio * question.points)
 
 
+def parse_image_identification_answer(text_answer):
+    """Return a safe {number: answer} mapping from the stored JSON value."""
+    if not text_answer:
+        return {}
+    try:
+        parsed = json.loads(text_answer)
+        return parsed if isinstance(parsed, dict) else {}
+    except (ValueError, TypeError):
+        return {}
+
+
+def image_identification_results(question, submitted):
+    """Build per-number grading details for scoring and instructor review."""
+    results = []
+    for item in question.image_identification_items.all():
+        student_answer = submitted.get(str(item.number), '')
+        is_correct = matches_accepted_answer(student_answer, item.accepted_answers())
+        results.append({
+            'number': item.number,
+            'student_answer': student_answer,
+            'accepted_answers': item.accepted_answers(),
+            'is_correct': is_correct,
+            'points_earned': item.points if is_correct else 0,
+            'points_possible': item.points,
+        })
+    return results
+
+
+def grade_image_identification(question, text_answer):
+    submitted = parse_image_identification_answer(text_answer)
+    return sum(
+        result['points_earned']
+        for result in image_identification_results(question, submitted)
+    )
+
+
 def grade_answer(question, selected_choice=None, text_answer=''):
     """Returns (points_earned, needs_manual_review)."""
-    if question.question_type in (Question.MCQ, Question.TF):
+    if question.question_type in (Question.MCQ, Question.PROGRAMMING_MCQ, Question.TF):
         return grade_mcq(question, selected_choice), False
     if question.question_type == Question.IDENT:
         return grade_identification(question, text_answer), False
@@ -105,6 +154,8 @@ def grade_answer(question, selected_choice=None, text_answer=''):
         return grade_enumeration(question, text_answer), False
     if question.question_type == Question.MATCH:
         return grade_matching(question, text_answer), False
+    if question.question_type == Question.IMAGE_IDENTIFICATION:
+        return grade_image_identification(question, text_answer), False
     if question.question_type == Question.CASE:
         # Auto-scored via keyword matching, but flagged so the instructor
         # can double-check essay-style answers if they choose to.

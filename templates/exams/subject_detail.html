@@ -1,39 +1,56 @@
 {% extends 'base.html' %}
 {% block title %}{{ subject.code }}{% endblock %}
 {% block content %}
-<div class="card">
-  <div style="display:flex; justify-content:space-between; align-items:center;">
-    <h2 style="margin:0;">{{ subject.code }} — {{ subject.name }}</h2>
-    <a class="btn btn-accent" href="{% url 'exams:exam_create' subject.id %}">+ New Exam</a>
-  </div>
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="{% url 'exams:instructor_dashboard' %}">Dashboard</a><span aria-hidden="true">/</span><span>{{ subject.code }}</span>
+</nav>
 
+<div class="page-header">
+  <div class="page-header-copy">
+    <span class="eyebrow">Subject workspace</span>
+    <h1>{{ subject.code }} · {{ subject.name }}</h1>
+    <p class="page-subtitle">Manage assessments and monitor the publishing status for this subject.</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-accent" href="{% url 'exams:exam_create' subject.id %}">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14"/></svg> New exam
+    </a>
+  </div>
+</div>
+
+<section class="card">
+  <div class="card-header">
+    <div><h2>Exams</h2><p>{{ exams|length }} assessment{{ exams|length|pluralize }} in this subject.</p></div>
+  </div>
   {% if exams %}
-    <table>
-      <thead><tr><th>Title</th><th>Items</th><th>Time Limit</th><th>Status</th><th></th></tr></thead>
-      <tbody>
-      {% for exam in exams %}
-        <tr>
-          <td>{{ exam.title }}</td>
-          <td>{{ exam.total_items }} / 100</td>
-          <td>{{ exam.time_limit_minutes }} min</td>
-          <td>
-            {% if exam.is_published %}
-              <span class="badge badge-published">Published</span>
-            {% else %}
-              <span class="badge badge-draft">Draft</span>
-            {% endif %}
-          </td>
-          <td><a href="{% url 'exams:exam_detail' exam.id %}">Manage →</a></td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-wrap responsive-table">
+      <table>
+        <thead><tr><th>Title</th><th>Questions</th><th>Time limit</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+        {% for exam in exams %}
+          <tr>
+            <td data-label="Title"><strong>{{ exam.title }}</strong></td>
+            <td data-label="Questions">{{ exam.total_items }} / 100</td>
+            <td data-label="Time limit">{{ exam.time_limit_minutes }} min</td>
+            <td data-label="Status">{% if exam.is_published %}<span class="badge badge-published">Published</span>{% else %}<span class="badge badge-neutral">Draft</span>{% endif %}</td>
+            <td data-label=""><a class="table-link" href="{% url 'exams:exam_detail' exam.id %}">Manage</a></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
   {% else %}
-    <p class="muted">No exams created for this subject yet.</p>
+    <div class="empty-state">
+      <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M6 3h9l4 4v14H6V3Z"/><path d="M14 3v5h5M12 11v6M9 14h6"/></svg></div>
+      <h3>Build your first exam</h3>
+      <p>Add the title, timing, class availability, and questions. You can keep it in draft until it is ready.</p>
+      <a class="btn btn-accent" href="{% url 'exams:exam_create' subject.id %}">Create exam</a>
+    </div>
   {% endif %}
-  <p style="margin-top:16px; display:flex; justify-content:space-between; align-items:center;">
-    <a href="{% url 'exams:instructor_dashboard' %}">&larr; Back to subjects</a>
-    <a href="{% url 'exams:subject_delete_confirm' subject.id %}" class="btn btn-danger btn-sm">Delete Subject</a>
-  </p>
+</section>
+
+<div class="page-header" style="margin:20px 0 0; align-items:center;">
+  <a class="btn btn-ghost" href="{% url 'exams:instructor_dashboard' %}">← Back to subjects</a>
+  <a href="{% url 'exams:subject_delete_confirm' subject.id %}" class="btn btn-danger btn-sm">Delete subject</a>
 </div>
 {% endblock %}

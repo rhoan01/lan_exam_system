@@ -1,20 +1,18 @@
 @echo off
-REM ============================================================
-REM Backs up all examination data (accounts, subjects, exams,
-REM questions, attempts, and scores) to a timestamped JSON file
-REM in the "backups" folder.
-REM
-REM Safe to run at any time, including while an exam is in
-REM progress - it only reads data, it never deletes or changes
-REM anything.
-REM
-REM Run this from the project root, with the same environment
-REM variables set as when the server is running (so it connects
-REM to the same database - MySQL settings if you're using MySQL).
-REM ============================================================
+setlocal
+REM Back up the active MySQL examination database to a timestamped JSON file.
 
-call venv\Scripts\activate.bat
+cd /d "%~dp0.."
+call "venv\Scripts\activate.bat"
+
+if not exist "deployment\mysql.local.bat" (
+  echo ERROR: deployment\mysql.local.bat was not found.
+  exit /b 1
+)
+call "deployment\mysql.local.bat"
 
 python manage.py backup_data
+if errorlevel 1 exit /b 1
 
-pause
+echo.
+echo Backup complete. Copy the new file in backups\ to another device.

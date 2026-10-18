@@ -10,13 +10,42 @@ from django.utils import timezone
 
 from accounts.decorators import instructor_required
 from results.models import ExamAttempt
-from results.grading import parse_matching_answer
+from results.grading import (
+    image_identification_results, parse_image_identification_answer,
+    parse_matching_answer,
+)
 from .forms import (
     SubjectForm, ExamForm, QuestionForm, QuestionEditForm, ChoiceFormSet, AnswerKeyForm,
     BulkImportForm, MatchingPairFormSet, MatchingDistractorForm,
+    ImageIdentificationItemFormSet,
 )
-from .models import Subject, Exam, Question, Choice, AnswerKey, MatchingPair, MatchingDistractor, MAX_ITEMS_PER_EXAM
+from .models import (
+    Subject, Exam, Question, Choice, AnswerKey, MatchingPair, MatchingDistractor,
+    ImageIdentificationItem, MAX_ITEMS_PER_EXAM,
+)
 from .parsing import parse_bulk_questions, BulkImportError
+
+
+def _replace_image_identification_items(question, formset):
+    """Replace a validated numbered key without unique-number swap conflicts."""
+    item_values = [
+        {
+            'number': item_form.cleaned_data['number'],
+            'correct_answer': item_form.cleaned_data['correct_answer'].strip(),
+            'alternate_answers': item_form.cleaned_data.get('alternate_answers', '').strip(),
+            'points': item_form.cleaned_data['points'],
+        }
+        for item_form in formset.forms
+        if item_form.cleaned_data
+        and not item_form.cleaned_data.get('DELETE')
+        and item_form.cleaned_data.get('number') is not None
+    ]
+    question.image_identification_items.all().delete()
+    ImageIdentificationItem.objects.bulk_create([
+        ImageIdentificationItem(question=question, **values) for values in item_values
+    ])
+    question.points = sum(values['points'] for values in item_values)
+    question.save(update_fields=['points'])
 
 
 @instructor_required
@@ -105,7 +134,7 @@ def exam_edit(request, exam_id):
 @instructor_required
 def exam_detail(request, exam_id):
     exam = get_object_or_404(Exam, id=exam_id, subject__instructor=request.user)
-    questions = exam.questions.all()
+    questions = exam.questions.prefetch_related('choices', 'image_identification_items')
     return render(request, 'exams/exam_detail.html', {
         'exam': exam,
         'questions': questions,
@@ -150,23 +179,44 @@ def question_create(request, exam_id):
         return redirect('exams:exam_detail', exam_id=exam.id)
 
     if request.method == 'POST':
-        form = QuestionForm(request.POST)
+        form = QuestionForm(request.POST, request.FILES)
         choice_formset = ChoiceFormSet(request.POST)
         key_form = AnswerKeyForm(request.POST)
         pair_formset = MatchingPairFormSet(request.POST, instance=Question())
         distractor_form = MatchingDistractorForm(request.POST)
+        image_item_formset = ImageIdentificationItemFormSet(request.POST, instance=Question())
 
         if form.is_valid():
             qtype = form.cleaned_data['question_type']
             valid_extra = True
 
-            if qtype == Question.MCQ:
+            if qtype in (Question.MCQ, Question.PROGRAMMING_MCQ):
                 choice_formset_bound = ChoiceFormSet(request.POST, instance=Question())
                 valid_extra = choice_formset_bound.is_valid() and any(
                     f.cleaned_data.get('choice_text') for f in choice_formset_bound.forms if f.cleaned_data
                 )
                 if not valid_extra:
                     messages.error(request, "Please provide at least one answer choice.")
+                elif qtype == Question.PROGRAMMING_MCQ:
+                    choice_count = sum(
+                        1 for f in choice_formset_bound.forms
+                        if f.cleaned_data and not f.cleaned_data.get('DELETE')
+                        and f.cleaned_data.get('choice_text')
+                    )
+                    correct_count = sum(
+                        1 for f in choice_formset_bound.forms
+                        if f.cleaned_data and not f.cleaned_data.get('DELETE')
+                        and f.cleaned_data.get('choice_text') and f.cleaned_data.get('is_correct')
+                    )
+                    if choice_count < 2:
+                        valid_extra = False
+                        messages.error(request, "Programming Multiple Choice needs at least two choices.")
+                    if correct_count != 1:
+                        valid_extra = False
+                        messages.error(request, "Programming Multiple Choice needs exactly one correct choice.")
+                    if not form.cleaned_data.get('code_snippet', '').strip():
+                        valid_extra = False
+                        form.add_error('code_snippet', "Enter the code students should analyze.")
 
             elif qtype == Question.TF:
                 tf_answer = request.POST.get('tf_correct_answer')
@@ -184,6 +234,14 @@ def question_create(request, exam_id):
                 if not valid_extra:
                     messages.error(request, "Matching questions need at least 2 complete Column A/B pairs.")
 
+            elif qtype == Question.IMAGE_IDENTIFICATION:
+                valid_extra = image_item_formset.is_valid()
+                if not valid_extra:
+                    messages.error(
+                        request,
+                        "Fix the numbered image-identification items below.",
+                    )
+
             else:
                 valid_extra = key_form.is_valid() and key_form.cleaned_data.get('correct_answers', '').strip()
                 if not valid_extra:
@@ -195,13 +253,13 @@ def question_create(request, exam_id):
                 question.order = exam.total_items() + 1
                 question.save()
 
-                if qtype == Question.MCQ:
+                if qtype in (Question.MCQ, Question.PROGRAMMING_MCQ):
                     formset = ChoiceFormSet(request.POST, instance=question)
                     formset.is_valid()
                     formset.save()
                     if not any(c.is_correct for c in question.choices.all()):
                         messages.warning(request, "Note: no choice was marked correct for that question.")
-                    messages.success(request, "Multiple choice question added.")
+                    messages.success(request, f"{question.get_question_type_display()} question added.")
 
                 elif qtype == Question.TF:
                     tf_answer = request.POST.get('tf_correct_answer')
@@ -228,6 +286,10 @@ def question_create(request, exam_id):
                             MatchingDistractor.objects.create(question=question, text=line)
                     messages.success(request, "Matching question added.")
 
+                elif qtype == Question.IMAGE_IDENTIFICATION:
+                    _replace_image_identification_items(question, image_item_formset)
+                    messages.success(request, "Image Identification question added.")
+
                 else:
                     key = key_form.save(commit=False)
                     key.question = question
@@ -240,6 +302,7 @@ def question_create(request, exam_id):
         key_form = AnswerKeyForm()
         pair_formset = MatchingPairFormSet()
         distractor_form = MatchingDistractorForm()
+        image_item_formset = ImageIdentificationItemFormSet()
 
     return render(request, 'exams/question_form.html', {
         'exam': exam,
@@ -248,6 +311,7 @@ def question_create(request, exam_id):
         'key_form': key_form,
         'pair_formset': pair_formset,
         'distractor_form': distractor_form,
+        'image_item_formset': image_item_formset,
         'question_types': Question.TYPE_CHOICES,
     })
 
@@ -260,6 +324,7 @@ def question_edit(request, question_id):
     question = get_object_or_404(Question, id=question_id, exam__subject__instructor=request.user)
     exam = question.exam
     qtype = question.question_type
+    image_locked = ExamAttempt.objects.filter(exam=exam).exists()
 
     existing_key = getattr(question, 'answer_key', None)
     tf_current_answer = None
@@ -272,22 +337,45 @@ def question_edit(request, question_id):
         existing_distractors_text = '\n'.join(d.text for d in question.matching_distractors.all())
 
     if request.method == 'POST':
-        form = QuestionEditForm(request.POST, instance=question)
+        form = QuestionEditForm(
+            request.POST, request.FILES, instance=question, image_locked=image_locked
+        )
         choice_formset = ChoiceFormSet(request.POST, instance=question)
         key_form = AnswerKeyForm(request.POST, instance=existing_key)
         pair_formset = MatchingPairFormSet(request.POST, instance=question)
         distractor_form = MatchingDistractorForm(request.POST)
+        image_item_formset = ImageIdentificationItemFormSet(request.POST, instance=question)
 
         if form.is_valid():
             valid_extra = True
 
-            if qtype == Question.MCQ:
+            if qtype in (Question.MCQ, Question.PROGRAMMING_MCQ):
                 valid_extra = choice_formset.is_valid() and any(
                     f.cleaned_data.get('choice_text') for f in choice_formset.forms
                     if f.cleaned_data and not f.cleaned_data.get('DELETE')
                 )
                 if not valid_extra:
                     messages.error(request, "Please provide at least one answer choice.")
+                elif qtype == Question.PROGRAMMING_MCQ:
+                    choice_count = sum(
+                        1 for f in choice_formset.forms
+                        if f.cleaned_data and not f.cleaned_data.get('DELETE')
+                        and f.cleaned_data.get('choice_text')
+                    )
+                    correct_count = sum(
+                        1 for f in choice_formset.forms
+                        if f.cleaned_data and not f.cleaned_data.get('DELETE')
+                        and f.cleaned_data.get('choice_text') and f.cleaned_data.get('is_correct')
+                    )
+                    if choice_count < 2:
+                        valid_extra = False
+                        messages.error(request, "Programming Multiple Choice needs at least two choices.")
+                    if correct_count != 1:
+                        valid_extra = False
+                        messages.error(request, "Programming Multiple Choice needs exactly one correct choice.")
+                    if not form.cleaned_data.get('code_snippet', '').strip():
+                        valid_extra = False
+                        form.add_error('code_snippet', "Enter the code students should analyze.")
 
             elif qtype == Question.TF:
                 tf_answer = request.POST.get('tf_correct_answer')
@@ -305,6 +393,34 @@ def question_edit(request, question_id):
                 if not valid_extra:
                     messages.error(request, "Matching questions need at least 2 complete Column A/B pairs.")
 
+            elif qtype == Question.IMAGE_IDENTIFICATION:
+                valid_extra = image_item_formset.is_valid()
+                if valid_extra and image_locked:
+                    submitted_numbers = {}
+                    has_new_or_deleted_items = False
+                    for item_form in image_item_formset.forms:
+                        if not item_form.cleaned_data:
+                            continue
+                        if item_form.cleaned_data.get('DELETE'):
+                            if item_form.instance.pk:
+                                has_new_or_deleted_items = True
+                            continue
+                        number = item_form.cleaned_data.get('number')
+                        if item_form.instance.pk:
+                            submitted_numbers[item_form.instance.pk] = number
+                        elif number is not None:
+                            has_new_or_deleted_items = True
+
+                    current_numbers = dict(
+                        question.image_identification_items.values_list('pk', 'number')
+                    )
+                    if has_new_or_deleted_items or submitted_numbers != current_numbers:
+                        valid_extra = False
+                        messages.error(
+                            request,
+                            "Item numbers cannot be added, removed, or changed after a student has started this exam.",
+                        )
+
             else:
                 valid_extra = key_form.is_valid() and key_form.cleaned_data.get('correct_answers', '').strip()
                 if not valid_extra:
@@ -313,7 +429,7 @@ def question_edit(request, question_id):
             if valid_extra:
                 form.save()
 
-                if qtype == Question.MCQ:
+                if qtype in (Question.MCQ, Question.PROGRAMMING_MCQ):
                     choice_formset.save()
                     if not any(c.is_correct for c in question.choices.all()):
                         messages.warning(request, "Note: no choice is marked correct for that question.")
@@ -345,6 +461,10 @@ def question_edit(request, question_id):
                             MatchingDistractor.objects.create(question=question, text=line)
                     messages.success(request, "Question updated.")
 
+                elif qtype == Question.IMAGE_IDENTIFICATION:
+                    _replace_image_identification_items(question, image_item_formset)
+                    messages.success(request, "Question updated.")
+
                 else:
                     key = key_form.save(commit=False)
                     key.question = question
@@ -353,11 +473,20 @@ def question_edit(request, question_id):
 
                 return redirect('exams:exam_detail', exam_id=exam.id)
     else:
-        form = QuestionEditForm(instance=question)
-        choice_formset = ChoiceFormSet(instance=question) if qtype == Question.MCQ else ChoiceFormSet()
+        form = QuestionEditForm(instance=question, image_locked=image_locked)
+        choice_formset = (
+            ChoiceFormSet(instance=question)
+            if qtype in (Question.MCQ, Question.PROGRAMMING_MCQ)
+            else ChoiceFormSet()
+        )
         key_form = AnswerKeyForm(instance=existing_key)
         pair_formset = MatchingPairFormSet(instance=question) if qtype == Question.MATCH else MatchingPairFormSet()
         distractor_form = MatchingDistractorForm(initial={'distractors_text': existing_distractors_text})
+        image_item_formset = (
+            ImageIdentificationItemFormSet(instance=question)
+            if qtype == Question.IMAGE_IDENTIFICATION
+            else ImageIdentificationItemFormSet()
+        )
 
     return render(request, 'exams/question_edit_form.html', {
         'exam': exam,
@@ -367,7 +496,9 @@ def question_edit(request, question_id):
         'key_form': key_form,
         'pair_formset': pair_formset,
         'distractor_form': distractor_form,
+        'image_item_formset': image_item_formset,
         'tf_current_answer': tf_current_answer,
+        'image_locked': image_locked,
     })
 
 
@@ -422,10 +553,14 @@ def bulk_import_questions(request, exam_id):
                             order=start_order + i,
                             question_type=q['question_type'],
                             question_text=q['question_text'],
+                            code_snippet=q.get('code_snippet', ''),
+                            code_language=q.get('code_language', ''),
                             points=q['points'],
                             expected_answer_count=q['expected_answer_count'],
                         )
-                        if q['question_type'] in (Question.MCQ, Question.TF):
+                        if q['question_type'] in (
+                            Question.MCQ, Question.PROGRAMMING_MCQ, Question.TF
+                        ):
                             for choice_text, is_correct in q['choices']:
                                 Choice.objects.create(
                                     question=question, choice_text=choice_text, is_correct=is_correct,
@@ -514,7 +649,10 @@ def view_student_attempt(request, attempt_id):
     )
     answers = attempt.answers.select_related(
         'question', 'selected_choice'
-    ).prefetch_related('question__choices', 'question__matching_pairs').order_by('question__order')
+    ).prefetch_related(
+        'question__choices', 'question__matching_pairs',
+        'question__image_identification_items',
+    ).order_by('question__order')
 
     for answer in answers:
         question = answer.question
@@ -532,6 +670,17 @@ def view_student_attempt(request, attempt_id):
                 )
             else:
                 answer.student_display = '(no answer)'
+        elif question.question_type == Question.IMAGE_IDENTIFICATION:
+            submitted = parse_image_identification_answer(answer.text_answer)
+            answer.image_item_results = image_identification_results(question, submitted)
+            answer.correct_display = '\n'.join(
+                f"{item.number}. {' | '.join(item.accepted_answers())}"
+                for item in question.image_identification_items.all()
+            ) or 'â€”'
+            answer.student_display = '\n'.join(
+                f"{item.number}. {submitted.get(str(item.number)) or '(no answer)'}"
+                for item in question.image_identification_items.all()
+            ) or '(no answer)'
         else:
             answer.correct_display = answer.question.answer_key.correct_answers if hasattr(question, 'answer_key') else '—'
             answer.student_display = answer.text_answer or '(no answer)'

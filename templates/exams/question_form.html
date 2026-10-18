@@ -1,11 +1,11 @@
 {% extends 'base.html' %}
 {% block title %}Add Question{% endblock %}
 {% block content %}
-<div class="card" style="max-width:680px;">
-  <h2>Add Question — {{ exam.title }}</h2>
-  <p class="muted">{{ exam.total_items }} / 100 items so far.</p>
+<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="{% url 'exams:exam_detail' exam.id %}">{{ exam.title }}</a><span aria-hidden="true">/</span><span>Add question</span></nav>
+<div class="card form-card">
+  <div class="form-intro"><span class="eyebrow">Question builder</span><h1>Add a question</h1><p class="muted">{{ exam.title }} · {{ exam.total_items }} of 100 items created.</p></div>
 
-  <form method="post" novalidate id="question-form">
+  <form method="post" enctype="multipart/form-data" novalidate id="question-form">
     {% csrf_token %}
 
     <p>
@@ -15,9 +15,29 @@
     <p>
       <label for="{{ form.question_text.id_for_label }}">Question Text</label>
       {{ form.question_text }}
-      {% for error in form.question_text.errors %}<div class="helptext" style="color:#a5322a;">{{ error }}</div>{% endfor %}
+      {% for error in form.question_text.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
     </p>
-    <p>
+    <div id="programming-section" class="form-section">
+      <h3>Code</h3>
+      <p class="helptext">Indentation and blank lines are preserved. The language is an optional display label.</p>
+      <p>
+        <label for="{{ form.code_language.id_for_label }}">Language (optional)</label>
+        {{ form.code_language }}
+      </p>
+      <p>
+        <label for="{{ form.code_snippet.id_for_label }}">Code snippet</label>
+        {{ form.code_snippet }}
+        {% for error in form.code_snippet.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+      </p>
+      <div class="code-preview-wrap">
+        <span class="helptext">Live student preview</span>
+        <div class="code-editor" data-code-preview>
+          <div class="code-titlebar"><span data-code-language>Code</span><span>Read only</span></div>
+          <ol class="code-lines" data-code-lines><li><code>Code preview</code></li></ol>
+        </div>
+      </div>
+    </div>
+    <p id="points-field">
       <label for="{{ form.points.id_for_label }}">Points</label>
       {{ form.points }}
     </p>
@@ -26,12 +46,12 @@
       {{ form.expected_answer_count }}
     </p>
 
-    <div id="mcq-section" style="border-top:1px solid #dbe1e8; padding-top:14px; margin-top:10px;">
-      <h3 style="margin-top:0;">Answer Choices</h3>
+    <div id="mcq-section" class="form-section">
+      <h3>Answer choices</h3>
       <p class="helptext">Check the box next to the correct choice.</p>
       {{ choice_formset.management_form }}
       {% for cform in choice_formset %}
-        <div class="choice-row">
+        <div class="choice-row teacher-choice-row">
           {{ cform.choice_text }}
           <label style="display:flex; align-items:center; gap:4px; margin:0; font-weight:400; white-space:nowrap;">
             {{ cform.is_correct }} Correct
@@ -40,8 +60,8 @@
       {% endfor %}
     </div>
 
-    <div id="tf-section" style="border-top:1px solid #dbe1e8; padding-top:14px; margin-top:10px;">
-      <h3 style="margin-top:0;">Correct Answer</h3>
+    <div id="tf-section" class="form-section">
+      <h3>Correct answer</h3>
       <p class="helptext">Select whether the statement is True or False.</p>
       <label class="choice-row">
         <input type="radio" name="tf_correct_answer" value="True"> True
@@ -51,8 +71,8 @@
       </label>
     </div>
 
-    <div id="match-section" style="border-top:1px solid #dbe1e8; padding-top:14px; margin-top:10px;">
-      <h3 style="margin-top:0;">Column A / Column B Pairs</h3>
+    <div id="match-section" class="form-section">
+      <h3>Column A / Column B pairs</h3>
       <p class="helptext">Each row is one Column A item and its correct Column B answer. Need at least 2 complete rows. Column B is shown to students in random order.</p>
       {{ pair_formset.management_form }}
       {% for pform in pair_formset %}
@@ -68,15 +88,19 @@
       {{ distractor_form.distractors_text }}
     </div>
 
-    <div id="key-section" style="border-top:1px solid #dbe1e8; padding-top:14px; margin-top:10px;">
-      <h3 style="margin-top:0;">Answer Key</h3>
+    <div id="image-identification-section" class="form-section">
+      {% include 'exams/_image_identification_editor.html' %}
+    </div>
+
+    <div id="key-section" class="form-section">
+      <h3>Answer key</h3>
       <p class="helptext" id="key-help">Enter the accepted answer(s), one per line.</p>
       {{ key_form.correct_answers }}
     </div>
 
-    <div style="margin-top:18px;">
-      <button type="submit" class="btn btn-accent">Save Question</button>
-      <a href="{% url 'exams:exam_detail' exam.id %}" class="btn btn-secondary">Done Adding Questions</a>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-accent">Save question</button>
+      <a href="{% url 'exams:exam_detail' exam.id %}" class="btn btn-secondary">Done adding questions</a>
     </div>
   </form>
 </div>
@@ -84,18 +108,24 @@
 <script>
   const typeSelect = document.getElementById('{{ form.question_type.id_for_label }}');
   const mcqSection = document.getElementById('mcq-section');
+  const programmingSection = document.getElementById('programming-section');
   const tfSection = document.getElementById('tf-section');
   const matchSection = document.getElementById('match-section');
+  const imageIdentificationSection = document.getElementById('image-identification-section');
   const keySection = document.getElementById('key-section');
+  const pointsField = document.getElementById('points-field');
   const enumCountField = document.getElementById('enum-count-field');
   const keyHelp = document.getElementById('key-help');
 
   function updateSections() {
     const type = typeSelect.value;
-    mcqSection.style.display = (type === 'MCQ') ? 'block' : 'none';
+    mcqSection.style.display = (type === 'MCQ' || type === 'PMCQ') ? 'block' : 'none';
+    programmingSection.style.display = (type === 'PMCQ') ? 'block' : 'none';
     tfSection.style.display = (type === 'TF') ? 'block' : 'none';
     matchSection.style.display = (type === 'MATCH') ? 'block' : 'none';
-    keySection.style.display = (type === 'MCQ' || type === 'TF' || type === 'MATCH') ? 'none' : 'block';
+    imageIdentificationSection.style.display = (type === 'image_identification') ? 'block' : 'none';
+    keySection.style.display = (type === 'MCQ' || type === 'PMCQ' || type === 'TF' || type === 'MATCH' || type === 'image_identification') ? 'none' : 'block';
+    pointsField.style.display = (type === 'image_identification') ? 'none' : 'block';
     enumCountField.style.display = (type === 'ENUM') ? 'block' : 'none';
 
     if (type === 'IDENT') {
@@ -108,6 +138,27 @@
   }
 
   typeSelect.addEventListener('change', updateSections);
+  const codeInput = document.getElementById('{{ form.code_snippet.id_for_label }}');
+  const languageInput = document.getElementById('{{ form.code_language.id_for_label }}');
+  const previewLines = document.querySelector('[data-code-lines]');
+  const previewLanguage = document.querySelector('[data-code-language]');
+
+  function updateCodePreview() {
+    previewLines.replaceChildren();
+    const lines = (codeInput.value || 'Code preview').split('\n');
+    lines.forEach(line => {
+      const item = document.createElement('li');
+      const code = document.createElement('code');
+      code.textContent = line || ' ';
+      item.appendChild(code);
+      previewLines.appendChild(item);
+    });
+    previewLanguage.textContent = languageInput.value.trim() || 'Code';
+  }
+
+  codeInput.addEventListener('input', updateCodePreview);
+  languageInput.addEventListener('input', updateCodePreview);
   updateSections();
+  updateCodePreview();
 </script>
 {% endblock %}

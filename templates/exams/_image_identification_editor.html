@@ -1,0 +1,179 @@
+<h3>Numbered image</h3>
+<p class="helptext">Upload one PNG, JPG, JPEG, or WEBP image (maximum 5 MB). Students can click it to zoom.</p>
+{% if image_locked %}
+  <div class="notice notice-warning">The image and item numbers are locked because at least one student has started this exam. Answers and points can still be corrected.</div>
+{% endif %}
+<p>
+  <label for="{{ form.image.id_for_label }}">Image</label>
+  {{ form.image }}
+  {% for error in form.image.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+</p>
+<div class="image-upload-preview{% if not question.image %} is-empty{% endif %}" data-image-preview-wrap>
+  <img data-image-preview {% if question.image %}src="{{ question.image.url }}"{% endif %} alt="Image preview">
+  <span data-image-preview-placeholder>{% if question.image %}Current image{% else %}Image preview appears here{% endif %}</span>
+</div>
+
+<div class="image-key-heading">
+  <div>
+    <h3>Numbered answer key</h3>
+    <p class="helptext">Use one row per number. Alternate answers are optional and entered one per line.</p>
+  </div>
+  <button type="button" class="btn btn-sm btn-secondary" data-add-image-item>Add row</button>
+</div>
+
+{{ image_item_formset.management_form }}
+{% for error in image_item_formset.non_form_errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+<div class="image-key-rows" data-image-key-rows>
+  {% for item_form in image_item_formset %}
+    <div class="image-key-row" data-image-key-row>
+      {{ item_form.id }}
+      {% for error in item_form.non_field_errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+      <p><label>Number</label>{{ item_form.number }}{% for error in item_form.number.errors %}<span class="field-error">{{ error }}</span>{% endfor %}</p>
+      <p><label>Correct answer</label>{{ item_form.correct_answer }}{% for error in item_form.correct_answer.errors %}<span class="field-error">{{ error }}</span>{% endfor %}</p>
+      <p><label>Alternate answers</label>{{ item_form.alternate_answers }}{% for error in item_form.alternate_answers.errors %}<span class="field-error">{{ error }}</span>{% endfor %}</p>
+      <p><label>Points</label>{{ item_form.points }}{% for error in item_form.points.errors %}<span class="field-error">{{ error }}</span>{% endfor %}</p>
+      <div class="image-key-remove">
+        <span hidden>{{ item_form.DELETE }}</span>
+        <button type="button" class="btn btn-sm btn-danger" data-remove-image-item>Remove</button>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+<template data-image-key-empty-form>
+  <div class="image-key-row" data-image-key-row>
+    {{ image_item_formset.empty_form.id }}
+    <p><label>Number</label>{{ image_item_formset.empty_form.number }}</p>
+    <p><label>Correct answer</label>{{ image_item_formset.empty_form.correct_answer }}</p>
+    <p><label>Alternate answers</label>{{ image_item_formset.empty_form.alternate_answers }}</p>
+    <p><label>Points</label>{{ image_item_formset.empty_form.points }}</p>
+    <div class="image-key-remove">
+      <span hidden>{{ image_item_formset.empty_form.DELETE }}</span>
+      <button type="button" class="btn btn-sm btn-danger" data-remove-image-item>Remove</button>
+    </div>
+  </div>
+</template>
+
+<details class="bulk-key-entry">
+  <summary>Bulk-enter numbered answers</summary>
+  <p class="helptext">One line per item, for example <code>1. CPU socket</code> or <code>1. CPU socket | processor socket</code>.</p>
+  <textarea rows="6" data-bulk-image-items placeholder="1. CPU socket | processor socket&#10;2. RAM slots"></textarea>
+  <button type="button" class="btn btn-sm btn-secondary" data-apply-bulk-image-items>Populate rows</button>
+  <span class="field-error" data-bulk-image-error></span>
+</details>
+
+<script>
+(function () {
+  const container = document.currentScript.closest('.form-section') || document.currentScript.parentElement;
+  const imageInput = container.querySelector('input[type="file"][name="image"]');
+  const previewWrap = container.querySelector('[data-image-preview-wrap]');
+  const preview = container.querySelector('[data-image-preview]');
+  const placeholder = container.querySelector('[data-image-preview-placeholder]');
+  const rows = container.querySelector('[data-image-key-rows]');
+  const emptyTemplate = container.querySelector('[data-image-key-empty-form]');
+  const totalForms = container.querySelector('[name$="-TOTAL_FORMS"]');
+
+  {% if image_locked %}imageInput.disabled = true;{% endif %}
+
+  {% if image_locked %}
+  container.querySelector('[data-add-image-item]').hidden = true;
+  container.querySelector('.bulk-key-entry').hidden = true;
+  rows.querySelectorAll('[data-image-key-row]').forEach(row => {
+    const idInput = row.querySelector('input[name$="-id"]');
+    if (!idInput || !idInput.value) {
+      row.hidden = true;
+      return;
+    }
+    row.querySelector('input[name$="-number"]').readOnly = true;
+    row.querySelector('[data-remove-image-item]').hidden = true;
+  });
+  {% endif %}
+
+  imageInput.addEventListener('change', () => {
+    const file = imageInput.files[0];
+    if (!file) return;
+    preview.src = URL.createObjectURL(file);
+    preview.onload = () => URL.revokeObjectURL(preview.src);
+    previewWrap.classList.remove('is-empty');
+    placeholder.textContent = 'New image preview';
+  });
+
+  function bindRow(row) {
+    row.querySelector('[data-remove-image-item]').addEventListener('click', () => {
+      const deleteInput = row.querySelector('input[name$="-DELETE"]');
+      deleteInput.checked = true;
+      row.hidden = true;
+      validateUniqueNumbers();
+    });
+    row.querySelector('input[name$="-number"]').addEventListener('input', validateUniqueNumbers);
+  }
+
+  function addRow(values) {
+    const index = Number(totalForms.value);
+    const fragment = emptyTemplate.content.cloneNode(true);
+    const row = fragment.querySelector('[data-image-key-row]');
+    row.innerHTML = row.innerHTML.replaceAll('__prefix__', String(index));
+    totalForms.value = String(index + 1);
+    rows.appendChild(fragment);
+    const added = rows.lastElementChild;
+    if (values) {
+      added.querySelector('input[name$="-number"]').value = values.number;
+      added.querySelector('input[name$="-correct_answer"]').value = values.correct;
+      added.querySelector('textarea[name$="-alternate_answers"]').value = values.alternates.join('\n');
+      added.querySelector('input[name$="-points"]').value = values.points || 1;
+    }
+    bindRow(added);
+    return added;
+  }
+
+  function activeRows() {
+    return Array.from(rows.querySelectorAll('[data-image-key-row]')).filter(row => !row.hidden);
+  }
+
+  function validateUniqueNumbers() {
+    const seen = new Set();
+    activeRows().forEach(row => {
+      const input = row.querySelector('input[name$="-number"]');
+      input.setCustomValidity('');
+      if (input.value && seen.has(input.value)) {
+        input.setCustomValidity('Each number must be unique within the question.');
+      }
+      if (input.value) seen.add(input.value);
+    });
+  }
+
+  rows.querySelectorAll('[data-image-key-row]').forEach(bindRow);
+  container.querySelector('[data-add-image-item]').addEventListener('click', () => addRow());
+
+  container.querySelector('[data-apply-bulk-image-items]').addEventListener('click', () => {
+    const error = container.querySelector('[data-bulk-image-error]');
+    const lines = container.querySelector('[data-bulk-image-items]').value.split(/\r?\n/).filter(line => line.trim());
+    const parsed = [];
+    for (const line of lines) {
+      const match = line.match(/^\s*(\d+)\s*[.)-]\s*(.+?)\s*$/);
+      if (!match) {
+        error.textContent = `Could not read: ${line}`;
+        return;
+      }
+      const answers = match[2].split('|').map(value => value.trim()).filter(Boolean);
+      if (!answers.length) {
+        error.textContent = `Missing answer: ${line}`;
+        return;
+      }
+      parsed.push({number: match[1], correct: answers[0], alternates: answers.slice(1), points: 1});
+    }
+    if (!parsed.length) {
+      error.textContent = 'Enter at least one numbered line.';
+      return;
+    }
+    if (new Set(parsed.map(item => item.number)).size !== parsed.length) {
+      error.textContent = 'Bulk entry contains duplicate numbers.';
+      return;
+    }
+    error.textContent = '';
+    activeRows().forEach(row => row.querySelector('[data-remove-image-item]').click());
+    parsed.forEach(addRow);
+    validateUniqueNumbers();
+  });
+}());
+</script>

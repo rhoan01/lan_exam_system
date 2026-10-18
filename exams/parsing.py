@@ -2,9 +2,11 @@
 Parser for bulk-importing exam questions from a plain text (.txt) file
 or pasted text, e.g. written in Notepad.
 
-Two input formats are supported, and can even be mixed in the same file.
-Each question is a "block" of text; blocks are separated by one or more
-blank lines.
+Three input formats are supported. The first two can be mixed in one file;
+Programming Multiple Choice uses its own numbered, three-part format so code
+can contain blank lines without being split into separate questions.
+For the first two formats, each question is a "block" of text and blocks are
+separated by one or more blank lines.
 
 --------------------------------------------------------------------
 FORMAT 1 - Structured (supports all question types)
@@ -70,6 +72,24 @@ Rules for Format 2:
 --------------------------------------------------------------------
 
 Windows/Notepad line endings (\\r\\n) are handled automatically.
+
+--------------------------------------------------------------------
+FORMAT 3 - Programming Multiple Choice
+--------------------------------------------------------------------
+    1. Analyze the output of the code.
+
+    num1 = 5
+    num2 = 10
+    print("Hello World!", num1 + num2)
+
+    A. Hello World
+    B. Hello World! 5
+    C. 5
+    D. Hello World! 15 *
+
+The first block is the question, the final run of lettered lines is the
+choice block, and everything between them is preserved as code. Exactly one
+choice must end in an asterisk.
 """
 import re
 
@@ -79,6 +99,9 @@ CHOICE_RE = re.compile(r'^([A-Za-z])[.)]\s*(.+)$')
 TF_ANSWER_RE = re.compile(r'^answer\s*:\s*(true|false)\s*$', re.IGNORECASE)
 PAIR_RE = re.compile(r'^PAIR\s*:\s*(.+?)\s*=\s*(.+)$', re.IGNORECASE)
 DISTRACTOR_RE = re.compile(r'^DISTRACTOR\s*:\s*(.+)$', re.IGNORECASE)
+PROGRAMMING_START_RE = re.compile(r'^(\d+)[.)](?:\s+(.*))?$')
+PROGRAMMING_CHOICE_RE = re.compile(r'^([A-Za-z])[.)]\s+(.+)$')
+TRAILING_CORRECT_RE = re.compile(r'\s*\*\s*$')
 
 
 class BulkImportError(Exception):
@@ -284,7 +307,150 @@ def _parse_simple_mcq_block(lines, idx):
     }
 
 
+def _normalize_lines(raw_text):
+    normalized = raw_text.replace('\r\n', '\n').replace('\r', '\n')
+    if normalized.startswith('\ufeff'):
+        normalized = normalized[1:]
+    lines = normalized.split('\n')
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    return lines
+
+
+def _choice_run_before(lines, boundary):
+    """Return True when the content before boundary ends in 2+ choices."""
+    index = boundary - 1
+    while index >= 0 and not lines[index].strip():
+        index -= 1
+    count = 0
+    while index >= 0 and PROGRAMMING_CHOICE_RE.match(lines[index]):
+        count += 1
+        index -= 1
+    return count >= 2
+
+
+def _split_programming_questions(lines):
+    """Split only at numbered starts that follow a completed choice block.
+
+    A numbered-looking line inside code is therefore kept as code, even when
+    it follows a blank line.
+    """
+    boundaries = [0]
+    for index in range(1, len(lines)):
+        if (
+            PROGRAMMING_START_RE.match(lines[index])
+            and not lines[index - 1].strip()
+            and _choice_run_before(lines, index)
+        ):
+            boundaries.append(index)
+    boundaries.append(len(lines))
+    return [lines[start:end] for start, end in zip(boundaries, boundaries[1:])]
+
+
+def _looks_like_programming_mcq(raw_text):
+    lines = _normalize_lines(raw_text)
+    if not lines or not PROGRAMMING_START_RE.match(lines[0]):
+        return False
+    # An answer-key line identifies the established quick-MCQ format. A
+    # numbered first block followed by a blank line identifies the new format,
+    # including malformed questions that still need a question-numbered error.
+    if ANSWER_KEY_RE.match(lines[-1].strip()):
+        return False
+    return any(not line.strip() for line in lines[1:])
+
+
+def _parse_programming_question(lines):
+    while lines and not lines[-1].strip():
+        lines.pop()
+
+    start_match = PROGRAMMING_START_RE.match(lines[0]) if lines else None
+    question_number = start_match.group(1) if start_match else '?'
+    error_prefix = f"Question {question_number}:"
+
+    first_blank = next((i for i, line in enumerate(lines) if not line.strip()), None)
+    if not start_match or first_blank is None:
+        raise BulkImportError(
+            f"{error_prefix} missing question text or its separating blank line.", question_number
+        )
+
+    first_question_line = start_match.group(2) or ''
+    question_text = '\n'.join([first_question_line, *lines[1:first_blank]]).strip()
+    if not question_text:
+        raise BulkImportError(f"{error_prefix} missing question text.", question_number)
+
+    choice_start = len(lines)
+    while choice_start > first_blank + 1 and PROGRAMMING_CHOICE_RE.match(lines[choice_start - 1]):
+        choice_start -= 1
+    choice_lines = lines[choice_start:]
+    if len(choice_lines) < 2:
+        raise BulkImportError(
+            f"{error_prefix} missing choices (add at least two trailing lines like 'A. Choice').",
+            question_number,
+        )
+    if choice_start == 0 or lines[choice_start - 1].strip():
+        raise BulkImportError(
+            f"{error_prefix} code and choices must be separated by a blank line.", question_number
+        )
+
+    code_lines = lines[first_blank + 1:choice_start]
+    while code_lines and not code_lines[0].strip():
+        code_lines.pop(0)
+    while code_lines and not code_lines[-1].strip():
+        code_lines.pop()
+    if not code_lines or not any(line.strip() for line in code_lines):
+        raise BulkImportError(f"{error_prefix} missing code.", question_number)
+    code_snippet = '\n'.join(code_lines)
+
+    choices = []
+    marked_count = 0
+    for line in choice_lines:
+        match = PROGRAMMING_CHOICE_RE.match(line)
+        choice_text = match.group(2)
+        is_correct = bool(TRAILING_CORRECT_RE.search(choice_text))
+        if is_correct:
+            marked_count += 1
+            choice_text = TRAILING_CORRECT_RE.sub('', choice_text)
+        choice_text = choice_text.strip()
+        if not choice_text:
+            raise BulkImportError(f"{error_prefix} contains an empty choice.", question_number)
+        choices.append((choice_text, is_correct))
+
+    if marked_count != 1:
+        raise BulkImportError(
+            f"{error_prefix} exactly one choice must end with '*'; found {marked_count}.",
+            question_number,
+        )
+
+    return {
+        'question_type': 'PMCQ',
+        'question_text': question_text,
+        'code_snippet': code_snippet,
+        'code_language': '',
+        'points': 1,
+        'expected_answer_count': 1,
+        'choices': choices,
+        'keys': [],
+        'pairs': [],
+        'distractors': [],
+    }
+
+
+def _parse_programming_questions(raw_text, max_new_items):
+    question_blocks = _split_programming_questions(_normalize_lines(raw_text))
+    if len(question_blocks) > max_new_items:
+        raise BulkImportError(
+            f"This text contains {len(question_blocks)} question(s), but this exam only has room "
+            f"for {max_new_items} more before reaching the 100-item limit."
+        )
+    return [_parse_programming_question(block) for block in question_blocks]
+
+
 def parse_bulk_questions(raw_text, max_new_items):
+    if _looks_like_programming_mcq(raw_text):
+        return _parse_programming_questions(raw_text, max_new_items)
+
     blocks = _split_into_blocks(raw_text)
 
     if not blocks:

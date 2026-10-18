@@ -1,5 +1,6 @@
-# Core framework
-Django>=4.2,<5.0
+# Core framework. Django 5.2.8+ is required for Python 3.14 support;
+# 5.2.12 also includes additional Python 3.14 and security fixes.
+Django>=5.2.12,<5.3
 
 # Production WSGI server for the actual examination deployment.
 # (Development can still use `python manage.py runserver`.)
@@ -12,9 +13,12 @@ whitenoise>=6.6,<7.0
 # Pure-Python MySQL/MariaDB driver — only used when DB_ENGINE=mysql.
 # No C build tools required, which matters on a bare Windows Server.
 # Safe to leave installed even if you stick with SQLite.
-PyMySQL>=1.1,<2.0
+PyMySQL[rsa]>=1.1,<2.0
 
 # PDF generation for the downloadable results report. Pure-Python with
 # prebuilt Windows wheels — no C compiler or extra system libraries needed
 # (unlike WeasyPrint, which requires GTK/Cairo to be installed separately).
 reportlab>=4.0,<5.0
+
+# Validates and reads instructor-uploaded PNG/JPEG/WEBP question images.
+Pillow>=11.3,<13.0

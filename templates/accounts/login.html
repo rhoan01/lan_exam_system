@@ -1,87 +1,68 @@
 {% extends 'base.html' %}
 {% block title %}Login{% endblock %}
+{% block body_class %}auth-page{% endblock %}
 {% block content %}
-
-<div class="card" style="max-width:420px; margin:0 auto;">
-  <h2>Login</h2>
-  <p class="muted">Students: use your ID Number. Instructors: use your assigned username.</p>
-
-  <form method="post" novalidate>
-    {% csrf_token %}
-
-{% for field in form %}
-  <p>
-    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-
-    {% if 'password' in field.name %}
-      <div style="position:relative;">
-        {{ field }}
-
-        <button
-          type="button"
-          onclick="togglePassword('{{ field.id_for_label }}', this)"
-          style="
-            position:absolute;
-            right:10px;
-            top:50%;
-            transform:translateY(-50%);
-            border:none;
-            background:none;
-            cursor:pointer;
-            font-size:18px;
-            padding:4px;
-            color:#666;
-          "
-          aria-label="Show password"
-        >
-          👁️
-        </button>
+<div class="auth-layout">
+  <aside class="auth-aside">
+    <a href="{% url 'accounts:login' %}" class="auth-brand" aria-label="ITE Exam Portal sign in">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M5 4.75h10.5A3.5 3.5 0 0 1 19 8.25v11H8.5A3.5 3.5 0 0 1 5 15.75v-11Z"/><path d="M8 8h7M8 11.5h7M8 15h4"/></svg>
+      </span>
+      <span class="brand-copy"><strong>ITE Exam Portal</strong><small>Department of Information Technology</small></span>
+    </a>
+    <div class="auth-hero">
+      <span class="eyebrow">Your learning, in focus</span>
+      <h1>Ready when you are.</h1>
+      <p>A calm, reliable space to take exams, track your progress, and keep your academic work moving forward.</p>
+      <div class="auth-points">
+        <span class="auth-point"><i aria-hidden="true">✓</i> Built for your local campus network</span>
+        <span class="auth-point"><i aria-hidden="true">✓</i> Your exam progress saves as you work</span>
+        <span class="auth-point"><i aria-hidden="true">✓</i> Results stay connected to your account</span>
       </div>
-    {% else %}
-      {{ field }}
-    {% endif %}
-
-    {% for error in field.errors %}
-      <div class="helptext" style="color:#a5322a;">
-        {{ error }}
+    </div>
+    <span class="auth-note">ITE Department · Secure LAN Examination System</span>
+  </aside>
+  <section class="auth-main" aria-labelledby="auth-title">
+    <div class="auth-form">
+      <div class="auth-form-header">
+        <span class="eyebrow">Welcome back</span>
+        <h2 id="auth-title">Sign in to your account</h2>
+        <p>Students can use their ID number. Instructors should use their assigned username.</p>
       </div>
-    {% endfor %}
-  </p>
-{% endfor %}
-
-{% if form.non_field_errors %}
-  <div class="helptext" style="color:#a5322a;">
-    {{ form.non_field_errors }}
-  </div>
-{% endif %}
-
-<button type="submit" class="btn btn-accent">
-  Login
-</button>
-
-
-  </form>
-
-  <p style="margin-top:14px;">
-    New student?
-    <a href="{% url 'accounts:register' %}">Register here</a>
-  </p>
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}<div class="field-error" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+        {% for field in form %}
+          <p>
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {% if 'password' in field.name %}
+              <span class="password-field">
+                {{ field }}
+                <button type="button" class="password-toggle" data-password-toggle="{{ field.id_for_label }}" aria-label="Show password" aria-pressed="false">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+                </button>
+              </span>
+            {% else %}
+              {{ field }}
+            {% endif %}
+            {% for error in field.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+          </p>
+        {% endfor %}
+        <button type="submit" class="btn btn-accent btn-lg">Sign in</button>
+      </form>
+      <p class="auth-switch">New student? <a href="{% url 'accounts:register' %}">Create an account</a></p>
+    </div>
+  </section>
 </div>
-
 <script>
-function togglePassword(fieldId, button) {
-    const passwordField = document.getElementById(fieldId);
-
-    if (passwordField.type === "password") {
-        passwordField.type = "text";
-        button.innerHTML = "🙈";
-        button.setAttribute("aria-label", "Hide password");
-    } else {
-        passwordField.type = "password";
-        button.innerHTML = "👁️";
-        button.setAttribute("aria-label", "Show password");
-    }
-}
+document.querySelectorAll('[data-password-toggle]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const field = document.getElementById(button.dataset.passwordToggle);
+    const visible = field.type === 'password';
+    field.type = visible ? 'text' : 'password';
+    button.setAttribute('aria-label', visible ? 'Hide password' : 'Show password');
+    button.setAttribute('aria-pressed', String(visible));
+  });
+});
 </script>
-
 {% endblock %}

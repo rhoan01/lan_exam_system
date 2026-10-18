@@ -1,56 +1,42 @@
 {% extends 'base.html' %}
 {% block title %}{{ attempt.student.get_full_name }} — {{ attempt.exam.title }}{% endblock %}
 {% block content %}
-<div class="card">
-  <h2 style="margin:0;">{{ attempt.student.get_full_name }}</h2>
-  <p class="muted" style="margin:4px 0 0;">
-    {{ attempt.student.student_profile.id_number }} ·
-    {{ attempt.student.student_profile.course }} ·
-    {{ attempt.student.student_profile.year_level }} ·
-    Section {{ attempt.student.student_profile.section }}
-  </p>
-  <p class="muted" style="margin:4px 0 0;">{{ attempt.exam.subject.code }} — {{ attempt.exam.title }}</p>
-  <p style="font-size:1.3rem; font-weight:700; margin-top:10px;">
-    {{ attempt.score|floatformat:0 }} / {{ attempt.total_points|floatformat:0 }} ({{ attempt.percentage }}%)
-  </p>
-  <p class="muted" style="margin-top:-6px;">
-    Submitted {{ attempt.submitted_at|date:"M d, Y H:i" }}
-    {% if attempt.tab_switch_count %} · <span class="badge badge-draft">{{ attempt.tab_switch_count }} tab switch{{ attempt.tab_switch_count|pluralize }}</span>{% endif %}
-  </p>
-</div>
-
-<div class="card">
-  <h3 style="margin-top:0;">Answers</h3>
+<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="{% url 'exams:exam_detail' attempt.exam.id %}">{{ attempt.exam.title }}</a><span aria-hidden="true">/</span><a href="{% url 'exams:exam_results' attempt.exam.id %}">Results</a><span aria-hidden="true">/</span><span>{{ attempt.student.get_full_name }}</span></nav>
+<section class="hero-panel" style="margin-bottom:20px;">
+  <span class="eyebrow">Student submission</span><h1>{{ attempt.student.get_full_name }}</h1>
+  <p class="page-subtitle">{{ attempt.student.student_profile.id_number }} · {{ attempt.student.student_profile.course }} · {{ attempt.student.student_profile.year_level }} · Section {{ attempt.student.student_profile.section }}</p>
+  <div class="meta-list" style="margin-top:18px; color:#c7d2e3;"><span>{{ attempt.exam.subject.code }} · {{ attempt.exam.title }}</span><span>Submitted {{ attempt.submitted_at|date:"M d, Y H:i" }}</span>{% if attempt.tab_switch_count %}<span class="badge badge-draft">{{ attempt.tab_switch_count }} tab switch{{ attempt.tab_switch_count|pluralize }}</span>{% endif %}</div>
+</section>
+<div class="stats-grid"><div class="stat-card"><div class="stat-label">Score</div><span class="stat-value">{{ attempt.score|floatformat:0 }} / {{ attempt.total_points|floatformat:0 }}</span></div><div class="stat-card"><div class="stat-label">Percentage</div><span class="stat-value">{{ attempt.percentage }}%</span></div><div class="stat-card"><div class="stat-label">Questions</div><span class="stat-value">{{ answers|length }}</span></div></div>
+<section class="card">
+  <div class="card-header"><div><span class="eyebrow">Answer review</span><h2>Response details</h2><p>Compare the student's response against the configured answer key.</p></div></div>
   {% for answer in answers %}
-    <div style="border-bottom:1px solid var(--border); padding:14px 0;">
+    <article class="answer-item">
       <span class="qtype-tag">{{ answer.question.get_question_type_display }} · {{ answer.question.points }} pt{{ answer.question.points|pluralize }}</span>
-      <div class="question-meta">Item {{ answer.question.order }}</div>
-      <p style="font-weight:600; margin:6px 0;">{{ answer.question.question_text }}</p>
-
-      <table style="margin-top:8px;">
-        <tbody>
-          <tr>
-            <th style="width:140px;">Student's Answer</th>
-            <td>{{ answer.student_display|linebreaksbr }}</td>
-          </tr>
-          <tr>
-            <th>Correct Answer</th>
-            <td>{{ answer.correct_display|linebreaksbr }}</td>
-          </tr>
-          <tr>
-            <th>Points Earned</th>
-            <td>
-              {{ answer.points_earned|floatformat:0 }} / {{ answer.question.points }}
-              {% if answer.needs_manual_review %} <span class="badge badge-draft">for review</span>{% endif %}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  {% empty %}
-    <p class="muted">No answers were recorded for this attempt.</p>
-  {% endfor %}
-
-  <p style="margin-top:16px;"><a href="{% url 'exams:exam_results' attempt.exam.id %}">&larr; Back to Results</a></p>
-</div>
+      <div class="question-meta">Item {{ answer.question.order }}</div><h3 style="margin:6px 0 14px;">{{ answer.question.question_text }}</h3>
+      {% if answer.question.question_type == 'PMCQ' %}
+        <div class="code-editor compact-code-editor">
+          <div class="code-titlebar"><span>{{ answer.question.code_language|default:"Code" }}</span><span>Read only</span></div>
+          <ol class="code-lines">{% for line in answer.question.code_lines %}<li><code>{{ line|default:" " }}</code></li>{% endfor %}</ol>
+        </div>
+      {% endif %}
+      {% if answer.question.question_type == 'image_identification' %}
+        {% if answer.question.image %}<img src="{{ answer.question.image.url }}" alt="Numbered identification image" class="question-image teacher-image-preview">{% endif %}
+        <div class="table-wrap"><table><thead><tr><th>#</th><th>Student answer</th><th>Accepted answer(s)</th><th>Result</th><th>Points</th></tr></thead><tbody>
+          {% for item in answer.image_item_results %}
+            <tr>
+              <td>{{ item.number }}</td>
+              <td>{{ item.student_answer|default:"(no answer)" }}</td>
+              <td>{{ item.accepted_answers|join:" | " }}</td>
+              <td>{% if item.is_correct %}<span class="badge badge-published">Correct</span>{% else %}<span class="badge badge-warning">Incorrect</span>{% endif %}</td>
+              <td><strong>{{ item.points_earned }} / {{ item.points_possible }}</strong></td>
+            </tr>
+          {% endfor %}
+        </tbody></table></div>
+      {% else %}
+        <div class="table-wrap"><table><tbody><tr><th style="width:170px;">Student's answer</th><td>{{ answer.student_display|linebreaksbr }}</td></tr><tr><th>Correct answer</th><td>{{ answer.correct_display|linebreaksbr }}</td></tr><tr><th>Points earned</th><td><strong>{{ answer.points_earned|floatformat:0 }} / {{ answer.question.points }}</strong>{% if answer.needs_manual_review %} <span class="badge badge-warning">For review</span>{% endif %}</td></tr></tbody></table></div>
+      {% endif %}
+    </article>
+  {% empty %}<div class="empty-state"><h3>No answers recorded</h3><p>This attempt does not contain saved responses.</p></div>{% endfor %}
+</section>
 {% endblock %}

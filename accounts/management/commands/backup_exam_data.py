@@ -41,7 +41,7 @@ class Command(BaseCommand):
             management.call_command(
                 'dumpdata', *apps_to_dump,
                 indent=2,
-                natural_foreign_keys=True,
+                use_natural_foreign_keys=True,
                 stdout=f,
             )
 

@@ -1,28 +1,40 @@
 {% extends 'base.html' %}
-{% block title %}Instructor Dashboard{% endblock %}
+{% block title %}Instructor dashboard{% endblock %}
 {% block content %}
-<div class="card">
-  <div style="display:flex; justify-content:space-between; align-items:center;">
-    <h2 style="margin:0;">My Subjects</h2>
-    <a class="btn btn-accent" href="{% url 'exams:subject_create' %}">+ New Subject</a>
+<section class="hero-panel" style="margin-bottom:20px;">
+  <span class="eyebrow">Instructor workspace</span>
+  <div class="page-header" style="margin:0; align-items:center;">
+    <div class="page-header-copy">
+      <h1>Welcome back, {{ user.first_name|default:user.username }}.</h1>
+      <p class="page-subtitle">Create assessments, publish them to your classes, and review student performance from one place.</p>
+    </div>
+    <div class="page-actions"><a class="btn btn-light btn-lg" href="{% url 'exams:subject_create' %}"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New subject</a></div>
   </div>
-
-  {% if subjects %}
-    <table>
-      <thead><tr><th>Code</th><th>Subject Name</th><th># Exams</th><th></th></tr></thead>
-      <tbody>
-      {% for subject in subjects %}
-        <tr>
-          <td>{{ subject.code }}</td>
-          <td>{{ subject.name }}</td>
-          <td>{{ subject.exams.count }}</td>
-          <td><a href="{% url 'exams:subject_detail' subject.id %}">Manage →</a></td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <p class="muted">You haven't created any subjects yet.</p>
-  {% endif %}
+</section>
+<div class="stats-grid">
+  <div class="stat-card"><div class="stat-label">Subjects <span class="stat-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 1 4 16.5v-11Z"/><path d="M4 16.5A2.5 2.5 0 0 1 6.5 14H20"/></svg></span></div><span class="stat-value">{{ subjects|length }}</span></div>
+  <div class="stat-card"><div class="stat-label">Workspace <span class="stat-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M4 13h6V4H4v9Zm0 7h6v-3H4v3Zm10 0h6v-9h-6v9Zm0-16v3h6V4h-6Z"/></svg></span></div><span class="stat-value" style="font-size:1.15rem; letter-spacing:-.02em;">Instructor</span></div>
+  <div class="stat-card"><div class="stat-label">Network <span class="stat-icon" style="color:var(--green-700); background:var(--green-50);"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5 9.5 17 19 7.5"/></svg></span></div><span class="stat-value" style="font-size:1.15rem; letter-spacing:-.02em; color:var(--green-700);">Ready</span></div>
 </div>
+<section class="card">
+  <div class="card-header">
+    <div><span class="eyebrow">Course management</span><h2>My subjects</h2><p>Open a subject to create exams, add questions, and view results.</p></div>
+    {% if subjects %}<a class="btn btn-secondary" href="{% url 'exams:subject_create' %}">Add another</a>{% endif %}
+  </div>
+  {% if subjects %}
+    <div class="item-grid">
+      {% for subject in subjects %}
+        <article class="item-card">
+          <div class="item-card-top"><div><div class="item-kicker">{{ subject.code }}</div><h3>{{ subject.name }}</h3></div><span class="badge badge-neutral">{{ subject.exams.count }} exam{{ subject.exams.count|pluralize }}</span></div>
+          <div class="item-card-footer"><span class="muted" style="font-size:.78rem;">Created {{ subject.created_at|date:"M d, Y" }}</span><a class="table-link" href="{% url 'exams:subject_detail' subject.id %}">Manage</a></div>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 1 4 16.5v-11Z"/><path d="M4 16.5A2.5 2.5 0 0 1 6.5 14H20M12 7v4M10 9h4"/></svg></div>
+      <h3>Create your first subject</h3><p>Subjects keep your exams and student results organized by course.</p><a class="btn btn-accent" href="{% url 'exams:subject_create' %}">Create subject</a>
+    </div>
+  {% endif %}
+</section>
 {% endblock %}

@@ -1,8 +1,11 @@
 from django import forms
-from django.forms import inlineformset_factory
+from django.forms import BaseInlineFormSet, inlineformset_factory
 
 from accounts.models import YEAR_LEVEL_CHOICES, SECTION_CHOICES
-from .models import Subject, Exam, Question, Choice, AnswerKey, MatchingPair
+from .models import (
+    Subject, Exam, Question, Choice, AnswerKey, MatchingPair,
+    ImageIdentificationItem,
+)
 
 
 class SubjectForm(forms.ModelForm):
@@ -60,12 +63,33 @@ class ExamForm(forms.ModelForm):
 class QuestionForm(forms.ModelForm):
     class Meta:
         model = Question
-        fields = ['question_type', 'question_text', 'points', 'expected_answer_count']
+        fields = [
+            'question_type', 'question_text', 'image', 'code_snippet', 'code_language',
+            'points', 'expected_answer_count',
+        ]
         widgets = {
             'question_text': forms.Textarea(attrs={'rows': 3}),
+            'image': forms.FileInput(attrs={
+                'accept': '.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp',
+            }),
+            'code_snippet': forms.Textarea(attrs={
+                'rows': 10,
+                'spellcheck': 'false',
+                'placeholder': 'Paste the code exactly as students should see it.',
+            }),
+            'code_language': forms.TextInput(attrs={'placeholder': 'e.g. Python'}),
             'points': forms.NumberInput(attrs={'min': 1}),
             'expected_answer_count': forms.NumberInput(attrs={'min': 1}),
         }
+
+    def clean(self):
+        cleaned = super().clean()
+        if (
+            cleaned.get('question_type') == Question.IMAGE_IDENTIFICATION
+            and not cleaned.get('image')
+        ):
+            self.add_error('image', "Upload the numbered image for this question.")
+        return cleaned
 
 
 class QuestionEditForm(forms.ModelForm):
@@ -74,12 +98,36 @@ class QuestionEditForm(forms.ModelForm):
     Everything else (text, points, expected answer count) is editable."""
     class Meta:
         model = Question
-        fields = ['question_text', 'points', 'expected_answer_count']
+        fields = ['question_text', 'image', 'code_snippet', 'code_language', 'points', 'expected_answer_count']
         widgets = {
             'question_text': forms.Textarea(attrs={'rows': 3}),
+            'image': forms.FileInput(attrs={
+                'accept': '.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp',
+            }),
+            'code_snippet': forms.Textarea(attrs={
+                'rows': 10,
+                'spellcheck': 'false',
+                'placeholder': 'Paste the code exactly as students should see it.',
+            }),
+            'code_language': forms.TextInput(attrs={'placeholder': 'e.g. Python'}),
             'points': forms.NumberInput(attrs={'min': 1}),
             'expected_answer_count': forms.NumberInput(attrs={'min': 1}),
         }
+
+    def __init__(self, *args, image_locked=False, **kwargs):
+        self.image_locked = image_locked
+        super().__init__(*args, **kwargs)
+        self.fields['image'].required = False
+
+    def clean_image(self):
+        if self.image_locked and self.files.get('image'):
+            raise forms.ValidationError(
+                "The image cannot be replaced after a student has started this exam."
+            )
+        image = self.cleaned_data.get('image')
+        if self.instance.question_type == Question.IMAGE_IDENTIFICATION and not image:
+            raise forms.ValidationError("This question must have an image.")
+        return image
 
 
 ChoiceFormSet = inlineformset_factory(
@@ -105,6 +153,52 @@ MatchingPairFormSet = inlineformset_factory(
     Question, MatchingPair,
     fields=['left_text', 'right_text'],
     extra=4, max_num=20, can_delete=True,
+)
+
+
+class BaseImageIdentificationItemFormSet(BaseInlineFormSet):
+    def clean(self):
+        super().clean()
+        if any(self.errors):
+            return
+
+        numbers = []
+        item_count = 0
+        for form in self.forms:
+            if not form.cleaned_data or form.cleaned_data.get('DELETE'):
+                continue
+            number = form.cleaned_data.get('number')
+            answer = (form.cleaned_data.get('correct_answer') or '').strip()
+            if number is None and not answer:
+                continue
+            item_count += 1
+            if not answer:
+                form.add_error('correct_answer', "Enter a correct answer.")
+            if number in numbers:
+                form.add_error('number', "Each number must be unique within the question.")
+            numbers.append(number)
+
+        if not item_count:
+            raise forms.ValidationError("Add at least one numbered item.")
+
+
+ImageIdentificationItemFormSet = inlineformset_factory(
+    Question,
+    ImageIdentificationItem,
+    formset=BaseImageIdentificationItemFormSet,
+    fields=['number', 'correct_answer', 'alternate_answers', 'points'],
+    widgets={
+        'number': forms.NumberInput(attrs={'min': 1, 'placeholder': '#'}),
+        'correct_answer': forms.TextInput(attrs={'placeholder': 'Correct answer'}),
+        'alternate_answers': forms.Textarea(attrs={
+            'rows': 2,
+            'placeholder': 'Alternate answers (one per line)',
+        }),
+        'points': forms.NumberInput(attrs={'min': 1}),
+    },
+    extra=3,
+    max_num=100,
+    can_delete=True,
 )
 
 
