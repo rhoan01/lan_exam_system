@@ -2,7 +2,7 @@
 
 This guide explains how to run the **LAN Examination System** (Django project
 `examsystem`) on a school computer laboratory network for an actual
-examination with ~160 simultaneous students.
+examination with up to 600 simultaneous students.
 
 **No Docker, Kubernetes, or cloud hosting is used or required.** The target
 environment is plain Windows Server 2019 + Python + MySQL/MariaDB + Waitress.
@@ -59,14 +59,14 @@ to work on the project.
 
 ### Why not keep SQLite for the actual exam?
 
-SQLite allows only **one writer at a time**. During an exam, ~160 students
+SQLite allows only **one writer at a time**. During an exam, hundreds of students
 may submit answers within the same few minutes — each submission is a
 database write. Under SQLite, these writes queue up one-by-one and can
 time out ("database is locked") under real concurrent load. SQLite remains
 perfectly fine for development and small-scale testing, which is why it's
 still the default when no environment variables are set.
 
-**Recommendation: use MySQL or MariaDB for the actual ~160-user
+**Recommendation: use MySQL or MariaDB for the actual 600-user
 examination.** It handles many simultaneous connections and concurrent
 writes properly, which is exactly the examination workload described above.
 
@@ -260,14 +260,14 @@ close the window.
 ## 10. Pre-Examination Load Testing
 
 Before trusting this system with a real exam, test it with a load close to
-160 concurrent users. Options, from simplest to most thorough:
+600 concurrent users. Options, from simplest to most thorough:
 
 1. **Manual LAN test:** have as many staff/student volunteers as you can
    gather log in and take a short practice exam simultaneously from
    different computers, while you watch for slow pages or errors.
 2. **Scripted load test (recommended if feasible):** use a tool such as
    [Locust](https://locust.io/) or [k6](https://k6.io/) from a separate
-   machine on the LAN to simulate ~160 virtual students logging in, opening
+   machine on the LAN to simulate ~600 virtual students logging in, opening
    an exam, and submitting answers, pointed at
    `http://<server-ip>:8000`.
 3. At minimum, test: simultaneous logins, simultaneous exam loading,
@@ -275,7 +275,7 @@ Before trusting this system with a real exam, test it with a load close to
    students are still testing, and toggling an exam's publish/lock status
    while students are logged in.
 
-**Do not assume the system can handle 160 concurrent users without testing
+**Do not assume the system can handle 600 concurrent users without testing
 it at that scale first** — the code changes in this deployment (MySQL,
 query optimizations) are designed to support that load, but only an actual
 test on your specific hardware and network confirms it.
@@ -308,7 +308,7 @@ practical minimum.
                         |
               +---------+---------+
               |                   |
-       Windows Server 2019    Student PCs (~160)
+       Windows Server 2019    Student PCs (up to 600)
               |
            Waitress
               |

@@ -1,5 +1,6 @@
 import csv
 import re
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.db import transaction
@@ -9,6 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.decorators import instructor_required
+from accounts.models import SECTION_CHOICES
 from results.models import ExamAttempt
 from results.grading import (
     image_identification_results, parse_image_identification_answer,
@@ -621,21 +623,72 @@ def _group_attempts_by_section(attempts):
     return sorted(buckets.items(), key=lambda item: (item[0] == 'Unassigned', item[0]))
 
 
+def _result_filters(request):
+    """Return validated controls for the instructor's result view."""
+    valid_sections = {value for value, _label in SECTION_CHOICES}
+    section = request.GET.get('section', '').strip()
+    name_order = request.GET.get('name_order', 'asc').strip().lower()
+    return {
+        'first_name': request.GET.get('first_name', '').strip()[:150],
+        'last_name': request.GET.get('last_name', '').strip()[:150],
+        'section': section if section in valid_sections else '',
+        'name_order': name_order if name_order in {'asc', 'desc'} else 'asc',
+    }
+
+
+def _filter_attempts(queryset, result_filters):
+    if result_filters['first_name']:
+        queryset = queryset.filter(student__first_name__icontains=result_filters['first_name'])
+    if result_filters['last_name']:
+        queryset = queryset.filter(student__last_name__icontains=result_filters['last_name'])
+    if result_filters['section']:
+        queryset = queryset.filter(student__student_profile__section=result_filters['section'])
+    return queryset
+
+
+def _student_name_ordering(result_filters, include_section=False):
+    direction = '-' if result_filters['name_order'] == 'desc' else ''
+    ordering = []
+    if include_section:
+        ordering.append('student__student_profile__section')
+    ordering.extend([
+        f'{direction}student__last_name',
+        f'{direction}student__first_name',
+        f'{direction}student__student_profile__id_number',
+    ])
+    return ordering
+
+
 @instructor_required
 def exam_results(request, exam_id):
     exam = get_object_or_404(Exam, id=exam_id, subject__instructor=request.user)
-    attempts = list(ExamAttempt.objects.filter(exam=exam, is_submitted=True).select_related(
+    result_filters = _result_filters(request)
+    attempts_queryset = ExamAttempt.objects.filter(exam=exam, is_submitted=True).select_related(
         'student', 'student__student_profile'
-    ).order_by('-score'))
-    in_progress_attempts = list(ExamAttempt.objects.filter(exam=exam, is_submitted=False).select_related(
+    )
+    in_progress_queryset = ExamAttempt.objects.filter(exam=exam, is_submitted=False).select_related(
         'student', 'student__student_profile'
-    ).order_by('student__student_profile__id_number'))
+    )
+    attempts = list(_filter_attempts(
+        attempts_queryset, result_filters
+    ).order_by(*_student_name_ordering(result_filters)))
+    in_progress_attempts = list(_filter_attempts(
+        in_progress_queryset, result_filters
+    ).order_by(*_student_name_ordering(result_filters)))
+    active_filter_query = {
+        key: value for key, value in result_filters.items()
+        if value and not (key == 'name_order' and value == 'asc')
+    }
     return render(request, 'exams/exam_results.html', {
         'exam': exam,
         'attempts': attempts,
         'in_progress_attempts': in_progress_attempts,
         'grouped_attempts': _group_attempts_by_section(attempts),
         'grouped_in_progress': _group_attempts_by_section(in_progress_attempts),
+        **result_filters,
+        'section_choices': SECTION_CHOICES,
+        'has_active_filters': bool(active_filter_query),
+        'filter_query': urlencode(active_filter_query),
     })
 
 
@@ -696,9 +749,13 @@ def export_exam_results_csv(request, exam_id):
     alphabetical by student name within each section. Opens directly in
     Excel or Google Sheets."""
     exam = get_object_or_404(Exam, id=exam_id, subject__instructor=request.user)
-    attempts = ExamAttempt.objects.filter(exam=exam, is_submitted=True).select_related(
-        'student', 'student__student_profile'
-    ).order_by('student__student_profile__section', 'student__student_profile__full_name')
+    result_filters = _result_filters(request)
+    attempts = _filter_attempts(
+        ExamAttempt.objects.filter(exam=exam, is_submitted=True).select_related(
+            'student', 'student__student_profile'
+        ),
+        result_filters,
+    ).order_by(*_student_name_ordering(result_filters, include_section=True))
 
     response = HttpResponse(content_type='text/csv')
     safe_title = re.sub(r'[^A-Za-z0-9_-]+', '_', f"{exam.subject.code}_{exam.title}").strip('_')
@@ -755,9 +812,13 @@ def export_exam_results_pdf(request, exam_id):
     )
 
     exam = get_object_or_404(Exam, id=exam_id, subject__instructor=request.user)
-    attempts = list(ExamAttempt.objects.filter(exam=exam, is_submitted=True).select_related(
-        'student', 'student__student_profile'
-    ).order_by('student__student_profile__section', 'student__student_profile__full_name'))
+    result_filters = _result_filters(request)
+    attempts = list(_filter_attempts(
+        ExamAttempt.objects.filter(exam=exam, is_submitted=True).select_related(
+            'student', 'student__student_profile'
+        ),
+        result_filters,
+    ).order_by(*_student_name_ordering(result_filters, include_section=True)))
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(

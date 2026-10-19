@@ -47,10 +47,9 @@ class User(AbstractUser):
 class StudentProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='student_profile')
     id_number = models.CharField(max_length=30, unique=True)
-    full_name = models.CharField(max_length=150)
     year_level = models.CharField(max_length=20, choices=YEAR_LEVEL_CHOICES)
     section = models.CharField(max_length=20, choices=SECTION_CHOICES)
     course = models.CharField(max_length=100)
 
     def __str__(self):
-        return f"{self.id_number} - {self.full_name}"
+        return f"{self.id_number} - {self.user.get_full_name() or self.user.username}"

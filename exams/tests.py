@@ -143,6 +143,115 @@ class ImageUploadValidationTests(SimpleTestCase):
             validate_question_image(disguised_file)
 
 
+class ExamResultNameFilterTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.instructor = User.objects.create_user(
+            username='filter-teacher', password='test-pass', role=User.INSTRUCTOR
+        )
+        subject = Subject.objects.create(
+            name='Database Systems', code='DB101', instructor=self.instructor
+        )
+        self.exam = Exam.objects.create(subject=subject, title='Midterm Exam')
+
+        self.maria_cruz = self.create_student('S-001', 'Maria Elena', 'Dela Cruz', 'B')
+        self.mario_santos = self.create_student('S-002', 'Mario', 'Santos', 'A')
+        self.maria_santos = self.create_student('S-003', 'Maria', 'Santos', 'B')
+
+        ExamAttempt.objects.create(
+            student=self.maria_cruz, exam=self.exam, is_submitted=True,
+            score=8, total_points=10,
+        )
+        ExamAttempt.objects.create(
+            student=self.mario_santos, exam=self.exam, is_submitted=True,
+            score=7, total_points=10,
+        )
+        ExamAttempt.objects.create(student=self.maria_santos, exam=self.exam)
+        self.client.force_login(self.instructor)
+
+    @staticmethod
+    def create_student(id_number, first_name, last_name, section):
+        User = get_user_model()
+        student = User.objects.create_user(
+            username=id_number, password='test-pass', role=User.STUDENT,
+            first_name=first_name, last_name=last_name,
+        )
+        StudentProfile.objects.create(
+            user=student,
+            id_number=id_number,
+            year_level='1st Year',
+            section=section,
+            course='BSIT',
+        )
+        return student
+
+    def test_results_filter_first_and_last_names_separately(self):
+        response = self.client.get(
+            reverse('exams:exam_results', args=[self.exam.id]),
+            {'first_name': 'maria', 'last_name': 'cruz'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [attempt.student for attempt in response.context['attempts']],
+            [self.maria_cruz],
+        )
+        self.assertEqual(response.context['in_progress_attempts'], [])
+        self.assertContains(response, 'Maria Elena Dela Cruz')
+        self.assertNotContains(response, 'Mario Santos')
+
+    def test_results_can_show_one_section_across_attempt_statuses(self):
+        response = self.client.get(
+            reverse('exams:exam_results', args=[self.exam.id]),
+            {'section': 'B'},
+        )
+
+        self.assertEqual(
+            [attempt.student for attempt in response.context['attempts']],
+            [self.maria_cruz],
+        )
+        self.assertEqual(
+            [attempt.student for attempt in response.context['in_progress_attempts']],
+            [self.maria_santos],
+        )
+        self.assertContains(response, 'Section B')
+        self.assertNotContains(response, 'Mario Santos')
+
+    def test_results_can_reverse_last_name_order(self):
+        response = self.client.get(
+            reverse('exams:exam_results', args=[self.exam.id]),
+            {'name_order': 'desc'},
+        )
+
+        self.assertEqual(
+            [attempt.student for attempt in response.context['attempts']],
+            [self.mario_santos, self.maria_cruz],
+        )
+        self.assertContains(response, 'Last name: Z to A')
+
+    def test_csv_export_uses_the_active_name_filter(self):
+        response = self.client.get(
+            reverse('exams:export_exam_results_csv', args=[self.exam.id]),
+            {'last_name': 'santos'},
+        )
+
+        content = response.content.decode()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('Mario Santos', content)
+        self.assertNotIn('Maria Elena Dela Cruz', content)
+
+    def test_csv_export_uses_the_active_section_filter(self):
+        response = self.client.get(
+            reverse('exams:export_exam_results_csv', args=[self.exam.id]),
+            {'section': 'B'},
+        )
+
+        content = response.content.decode()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('Maria Elena Dela Cruz', content)
+        self.assertNotIn('Mario Santos', content)
+
+
 class ImageIdentificationEditorTests(TestCase):
     def setUp(self):
         self.media_directory = tempfile.TemporaryDirectory()
@@ -156,12 +265,12 @@ class ImageIdentificationEditorTests(TestCase):
             username='image-teacher', password='test-pass', role=User.INSTRUCTOR
         )
         self.student = User.objects.create_user(
-            username='image-student', password='test-pass', role=User.STUDENT
+            username='image-student', password='test-pass', role=User.STUDENT,
+            first_name='Image', last_name='Student',
         )
         StudentProfile.objects.create(
             user=self.student,
             id_number='IMG-001',
-            full_name='Image Student',
             year_level='1st Year',
             section='A',
             course='BSIT',

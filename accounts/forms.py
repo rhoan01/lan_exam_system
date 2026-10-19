@@ -9,7 +9,8 @@ class StudentRegistrationForm(UserCreationForm):
     The student's ID Number is used as their username for login.
     """
     id_number = forms.CharField(label="ID Number", max_length=30)
-    full_name = forms.CharField(label="Full Name", max_length=150)
+    first_name = forms.CharField(label="First Name", max_length=150)
+    last_name = forms.CharField(label="Last Name", max_length=150)
     year_level = forms.ChoiceField(
         label="Year",
         choices=YEAR_LEVEL_CHOICES,
@@ -19,7 +20,10 @@ class StudentRegistrationForm(UserCreationForm):
 
     class Meta:
         model = User
-        fields = ('id_number', 'full_name', 'year_level', 'section', 'course', 'password1', 'password2')
+        fields = (
+            'id_number', 'first_name', 'last_name', 'year_level', 'section',
+            'course', 'password1', 'password2',
+        )
 
     def clean_id_number(self):
         id_number = self.cleaned_data['id_number'].strip()
@@ -31,10 +35,8 @@ class StudentRegistrationForm(UserCreationForm):
 
     def save(self, commit=True):
         user = super().save(commit=False)
-        full_name = self.cleaned_data['full_name'].strip()
-        name_parts = full_name.split(' ', 1)
-        user.first_name = name_parts[0]
-        user.last_name = name_parts[1] if len(name_parts) > 1 else ''
+        user.first_name = self.cleaned_data['first_name'].strip()
+        user.last_name = self.cleaned_data['last_name'].strip()
         user.username = self.cleaned_data['id_number']
         user.role = User.STUDENT
         if commit:
@@ -42,7 +44,6 @@ class StudentRegistrationForm(UserCreationForm):
             StudentProfile.objects.create(
                 user=user,
                 id_number=self.cleaned_data['id_number'],
-                full_name=full_name,
                 year_level=self.cleaned_data['year_level'],
                 section=self.cleaned_data['section'],
                 course=self.cleaned_data['course'],

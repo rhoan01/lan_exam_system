@@ -87,12 +87,12 @@ class ImageIdentificationIntegrationTests(TestCase):
             username='teacher', password='test-pass', role=User.INSTRUCTOR
         )
         self.student = User.objects.create_user(
-            username='student', password='test-pass', role=User.STUDENT
+            username='student', password='test-pass', role=User.STUDENT,
+            first_name='Test', last_name='Student',
         )
         StudentProfile.objects.create(
             user=self.student,
             id_number='2026-0001',
-            full_name='Test Student',
             year_level='1st Year',
             section='A',
             course='BSIT',

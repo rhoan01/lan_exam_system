@@ -125,7 +125,7 @@ WSGI_APPLICATION = 'examsystem.wsgi.application'
 # DB_ENGINE=sqlite (default) -> single-file SQLite database, fine for
 #     development, testing, and small trial runs.
 # DB_ENGINE=mysql -> MySQL / MariaDB, recommended for the actual
-#     examination day with ~160 concurrent students (see
+#     examination day with hundreds of concurrent students (see
 #     deployment/README_DEPLOYMENT.md for why, and for setup steps).
 DB_ENGINE = os.environ.get('DB_ENGINE', 'sqlite').strip().lower()
 
@@ -160,9 +160,9 @@ if DB_ENGINE == 'mysql':
                 'charset': 'utf8mb4',
                 'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
             },
-            # Keep a small pool of persistent connections alive between
-            # requests instead of reconnecting every time — meaningful at
-            # ~160 concurrent users. 60 seconds is a safe, conservative value.
+            # Waitress owns a bounded thread pool, so at most one persistent
+            # database connection per active worker thread is needed. Reusing
+            # these connections avoids setup overhead during autosave bursts.
             'CONN_MAX_AGE': 60,
             'CONN_HEALTH_CHECKS': True,
         }

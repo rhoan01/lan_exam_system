@@ -659,6 +659,30 @@ pre code { padding: 0; color: inherit; background: none; }
 .nav-controls { display: flex; justify-content: space-between; gap: 10px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); }
 
 .lockdown-overlay { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(12, 20, 39, .88); backdrop-filter: blur(10px); }
+
+.results-filter-card { padding: 22px; }
+.results-filter-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
+.results-filter-header h2 { margin: 2px 0 4px; font-size: 1.2rem; }
+.results-filter-header p { margin: 0; color: var(--muted); }
+.filter-status { flex: 0 0 auto; padding: 6px 10px; border-radius: 999px; color: var(--blue-700); background: var(--blue-50); font-size: .75rem; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; }
+.results-filter-form { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)) auto; gap: 14px; align-items: end; }
+.results-filter-form label { display: block; margin-bottom: 6px; font-weight: 700; }
+.results-filter-form input, .results-filter-form select { width: 100%; }
+.results-filter-actions { display: flex; gap: 8px; align-items: center; }
+.active-filter-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); color: var(--muted); font-size: .84rem; }
+.filter-chip { display: inline-flex; align-items: center; min-height: 28px; padding: 4px 9px; border: 1px solid var(--border); border-radius: 999px; color: var(--navy-800); background: var(--slate-50); font-weight: 700; }
+.sort-hint { display: inline-block; margin-left: 4px; color: var(--blue-600); font-size: .68rem; font-weight: 800; }
+
+@media (max-width: 1100px) {
+  .results-filter-form { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+  .results-filter-actions { grid-column: 1 / -1; }
+}
+
+@media (max-width: 760px) {
+  .results-filter-form { grid-template-columns: 1fr; }
+  .results-filter-actions { grid-column: auto; flex-wrap: wrap; }
+  .results-filter-header { flex-direction: column; }
+}
 .lockdown-box { width: min(100%, 450px); padding: 34px; border: 1px solid rgba(255,255,255,.2); border-radius: var(--radius-xl); background: var(--white); box-shadow: var(--shadow-lg); text-align: center; }
 .lockdown-icon { width: 62px; height: 62px; display: grid; place-items: center; margin: 0 auto 18px; border-radius: 20px; color: var(--blue-700); background: var(--blue-50); }
 .lockdown-icon svg { width: 30px; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }

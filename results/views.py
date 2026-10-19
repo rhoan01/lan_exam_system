@@ -152,7 +152,7 @@ def _auto_grade_and_submit(attempt):
     """Grades whatever answers exist for this attempt and marks it submitted.
 
     Written to use a small, fixed number of queries regardless of how many
-    questions the exam has (important when ~160 students may be submitting
+    questions the exam has (important when hundreds of students may submit
     at the same time): one query for questions, one for existing answers
     (with their selected choice preloaded), one bulk_update for the graded
     answers, and one save for the attempt itself.

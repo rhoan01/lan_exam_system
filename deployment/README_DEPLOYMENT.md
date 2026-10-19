@@ -3,7 +3,8 @@
 This document covers deploying the **LAN Examination System**
 (Django project `examsystem`, apps `accounts`, `exams`, `results`) on a
 school computer laboratory network for actual examination use with
-approximately **160 simultaneous student computers**.
+up to **600 simultaneous student computers**, subject to the pre-exam load
+test and hardware/network guidance in Section 18.
 
 **No Docker, Kubernetes, or any container platform is used or required.**
 Everything here runs directly on Windows Server with Python.
@@ -95,18 +96,18 @@ This installs:
 
 ## 5. Database setup
 
-### Should you use SQLite or MySQL/MariaDB for ~160 concurrent users?
+### Should you use SQLite or MySQL/MariaDB for hundreds of concurrent users?
 
 **SQLite's limitation:** SQLite allows many simultaneous *readers*, but
 only **one writer at a time** for the whole database file. During an
-exam, every answer submission is a write. With ~160 students
+exam, every answer submission is a write. With hundreds of students
 potentially submitting within the same few minutes (e.g. everyone
 finishing near the time limit), SQLite writes serialize one after
 another. Django/SQLite will retry briefly on a locked database, but
 under sustained concurrent writes this shows up as slow submissions or
 occasional "database is locked" errors.
 
-**Recommendation:** for the actual exam day with ~160 concurrent
+**Recommendation:** for the actual exam day with hundreds of concurrent
 students, **use MySQL or MariaDB**. It supports many concurrent writers
 without this bottleneck. For development, testing, or a much smaller
 class size, SQLite (the default) is fine and requires no extra setup.
@@ -136,7 +137,7 @@ and only switch to MySQL for exam day itself, without touching code.
 
 3. Copy `deployment/.env.example` to the ignored local file
    `deployment/mysql.local.bat`, fill in its environment variables, and
-   start the server with `deployment/start_waitress.bat`:
+   start the server with `deployment/run_exam_system.bat`:
 
    ```
    DB_ENGINE=mysql
@@ -176,7 +177,8 @@ variables**, not by editing `examsystem/settings.py` directly. This
 keeps the same codebase working for both development and exam day. See
 `deployment/.env.example` for the full list, and
 `deployment/mysql.local.bat` for this server's ignored local values.
-`deployment/start_waitress.bat` loads that file automatically.
+`deployment/run_exam_system.bat` loads that file automatically and refuses
+to start if the active database is not MySQL.
 
 Key ones for exam day:
 ```
@@ -215,7 +217,7 @@ python manage.py collectstatic --noinput
 ```
 
 This copies all static files into the `staticfiles/` folder, where
-WhiteNoise serves them from. `deployment/start_waitress.bat` already
+WhiteNoise serves them from. `deployment/run_exam_system.bat` already
 runs this automatically each time it starts the server, so you
 normally don't need to run it by hand — but re-run it manually if you
 edit any CSS/JS and don't see the change reflected.
@@ -245,7 +247,7 @@ waitress-serve --help
 ## 11. Waitress startup command
 
 ```cmd
-waitress-serve --listen=0.0.0.0:8000 --threads=8 examsystem.wsgi:application
+waitress-serve --listen=0.0.0.0:8000 --threads=32 --connection-limit=400 --backlog=2048 --channel-timeout=20 examsystem.wsgi:application
 ```
 
 - `examsystem.wsgi:application` is this project's actual WSGI module —
@@ -253,14 +255,15 @@ waitress-serve --listen=0.0.0.0:8000 --threads=8 examsystem.wsgi:application
 - `--listen=0.0.0.0:8000` makes it listen on **all** network interfaces
   on port 8000, so it's reachable from other computers on the LAN (not
   just the server itself).
-- `--threads=8` lets Waitress handle multiple requests concurrently
-  within one process, which is what actually lets 160 students be
+- `--threads=32` lets Waitress handle multiple requests concurrently
+  within one process, which lets short requests from hundreds of students be
   served at once (a single-threaded server would process one request
-  at a time). 8 is a reasonable starting point for this workload — you
-  can raise it (e.g. `--threads=16`) if load testing (Section 18) shows
-  requests queuing up.
+  at a time). On Windows, the launcher caps live Waitress channels at 400 to
+  stay below the `select()` descriptor ceiling; a 2048-socket OS backlog queues
+  the remainder of a burst. Adjust only after load testing.
 
-`deployment/start_waitress.bat` wraps all of this into one double-clickable script.
+`deployment/run_exam_system.bat` wraps all of this into one double-clickable
+script. The older `start_waitress.bat` delegates to the same launcher.
 
 ## 12. Windows Firewall configuration
 
@@ -339,9 +342,9 @@ internet-facing.
 4. Run:
    ```cmd
    venv\Scripts\activate
-   deployment\start_waitress.bat
+   deployment\run_exam_system.bat
    ```
-   (or just double-click `start_waitress.bat` in File Explorer, after
+   (or just double-click `run_exam_system.bat` in File Explorer, after
    editing it once with your real IP/credentials — see the file's
    comments).
 5. Confirm you see `Serving on http://0.0.0.0:8000` in the console
@@ -427,15 +430,10 @@ records; it does not wipe the database first).
 
 ## 18. Recommended pre-examination testing
 
-**Important — please read Section 21 first.** This project was built
-in a sandbox with no internet access and no Django installation, so an
-actual 160-concurrent-user load test could not be run there. The
-system has **not** been empirically verified to handle 160 simultaneous
-users — the changes made (Section 20) are targeted at removing the
-most obvious bottlenecks, but "the obvious bottlenecks were fixed" is a
-narrower claim than "confirmed to handle 160 users," and you should
-treat it that way until you've run a rehearsal test on your actual
-hardware.
+**Important — please read Section 21 first.** The capacity target is 600
+clients. Configuration alone cannot guarantee that number on every CPU, disk,
+switch, and exam design, so run the included burst test and a realistic
+submission rehearsal on the actual campus network.
 
 ### A practical LAN test you can run yourself, without extra tools
 
@@ -445,7 +443,7 @@ hardware.
    correctly.
 2. **Scale up:** if possible, schedule a rehearsal with a full room (or
    as many computers as you can gather) taking a real practice exam at
-   the same time, ideally the number closest to your actual 160.
+   the same time, ideally the number closest to your actual 600.
 3. **Watch the server console** during the test for any error
    tracebacks.
 4. **Watch response times** — if pages start taking several seconds to
@@ -455,16 +453,20 @@ hardware.
 
 ### A scripted concurrency test (optional, for the technically inclined)
 
-If you have Python and want a rough automated load test, the
-[`locust`](https://locust.io/) tool (a separate pip package, not
-included here since it's a testing tool rather than part of the exam
-system itself) lets you simulate many simultaneous virtual users
-hitting the login and exam pages. This is optional — the manual
-rehearsal above is the more realistic test for this specific use case.
+With the production server running, execute the included dependency-free
+connection burst test from the server or, preferably, another wired machine:
+
+```cmd
+python deployment\load_test_600.py --url http://SERVER-IP:8000/login/
+```
+
+It requires 600 successful responses. This verifies the HTTP burst path; the
+manual rehearsal is still needed to test realistic logins, autosaves, images,
+and simultaneous final submissions.
 
 ### Things specifically worth testing before relying on this for a real exam
 
-- 160 (or as many as available) simultaneous logins
+- 600 (or as many as available) simultaneous logins
 - Multiple students opening the same exam at once
 - Multiple students submitting within the same minute (worst case:
   everyone submits right as the timer hits zero)
@@ -516,7 +518,7 @@ rehearsal above is the more realistic test for this specific use case.
 
 ## 20. What was changed in the code, and why
 
-These changes were made to the existing project to support the ~160
+These changes were made to the existing project to target the 600-client
 concurrent LAN examination use case. **Nothing about the existing
 features, UI, or working functionality was removed or rebuilt** — this
 was additive/configuration work plus targeted performance fixes.
@@ -559,7 +561,7 @@ was additive/configuration work plus targeted performance fixes.
 - **`requirements.txt`** — added `waitress`, `whitenoise`, and
   `PyMySQL`.
 - **New `deployment/` folder** — this guide, plus
-  `start_waitress.bat`, `backup.bat`, and `.env.example` to make the
+  `run_exam_system.bat`, `load_test_600.py`, `backup.bat`, and `.env.example` to make the
   above configuration concrete and copy-pasteable.
 
 **Access control was already in place** in the existing code before
@@ -573,21 +575,10 @@ views, not re-implemented, since it was already correct.
 
 To be direct about the boundaries of what's been verified:
 
-- **No live load test was performed.** The environment this project
-  was built in has no internet access and no Django installation, so
-  it was not possible to actually spin up the server and simulate 160
-  concurrent users. The performance changes in Section 20 target
-  specific, identifiable bottlenecks (N+1 queries during grading,
-  SQLite's single-writer limitation, unindexed lookups) — but that is
-  a narrower claim than "confirmed to handle 160 users," and you
-  should treat it that way until you've run the rehearsal test in
-  Section 18 on your actual hardware.
-- **Waitress's `--threads` value (8) is a reasonable starting point,
-  not a benchmarked number** for your specific server's CPU/RAM. Adjust
-  based on what your own rehearsal test shows.
-- **MySQL vs. MariaDB:** both are supported identically through the
-  same `DB_ENGINE=mysql` setting (MariaDB is wire-compatible with
-  MySQL's protocol), but only the general approach was verified by
-  reasoning through Django's MySQL backend requirements — an actual
-  MySQL/MariaDB server was not available to connect to and test
-  against in this environment.
+- **The included burst test is not a full transactional load test.** It checks
+  600 concurrent HTTP connections. A realistic exam rehearsal on the actual
+  server and LAN remains the only way to confirm 600 students for a specific
+  question set and hardware configuration.
+- **Waitress's `--threads=32` is a tuned starting point, not a universal
+  guarantee.** The launcher verifies that MySQL has enough connection headroom;
+  adjust only after measuring a rehearsal.

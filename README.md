@@ -39,7 +39,7 @@ scoring.
 ## Deploying for a real examination (Windows Server + MySQL + Waitress)
 
 The steps below (SQLite + `runserver`) are for development and small
-tryouts. For an actual exam with a full computer lab (~100+ students
+tryouts. For an actual exam with a full campus load (up to 600 students
 submitting at once), see **[`deployment/README_DEPLOYMENT.md`](deployment/README_DEPLOYMENT.md)**,
 which covers: switching to MySQL/MariaDB, running behind Waitress
 instead of the development server, Windows Firewall/LAN configuration,
@@ -122,7 +122,9 @@ Then, from any device on the same LAN, browse to:
   deployment, set `DB_ENGINE=mysql` and the other values documented in
   `deployment/.env.example`; no source-code edits are required.
 - Production secrets, `DEBUG`, allowed hosts, and the database connection are
-  supplied through the ignored `deployment/mysql.local.bat` file.
+  supplied through the ignored `deployment/mysql.local.bat` file. Start the
+  production stack with `deployment/run_exam_system.bat`; it refuses to run
+  against SQLite.
 - Case Analysis grading is keyword-based (a practical approach for
   auto-scoring free text); instructors can still review those specific
   answers via the Django admin (`ExamAttempt` → inline student answers)

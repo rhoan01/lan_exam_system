@@ -192,7 +192,10 @@
   let warningTimeout = null;
   let autosaveDebounceTimer = null;
   let timerInterval = null;
-  let autosaveInterval = null;
+  let autosaveHeartbeatTimer = null;
+  let autosaveInFlight = false;
+  let changeVersion = 0;
+  let savedVersion = 0;
 
   const autosaveUrl = "{% url 'results:autosave_exam' exam.id %}";
   const logTabSwitchUrl = "{% url 'results:log_tab_switch' exam.id %}";
@@ -269,14 +272,14 @@
   });
 
   // ---------------- Navigation ----------------
-  function showQuestion(index) {
+  function showQuestion(index, savePosition = true) {
     if (index < 0 || index >= questionBlocks.length) return;
     currentIndex = index;
     questionBlocks.forEach((block, i) => block.classList.toggle('active', i === index));
     navButtons.forEach((btn, i) => btn.classList.toggle('current', i === index));
     prevBtn.disabled = (index === 0);
     nextBtn.textContent = (index === questionBlocks.length - 1) ? 'Review First Item' : 'Next →';
-    scheduleAutosave();
+    if (savePosition) markAutosaveDirty();
   }
 
   function isAnswered(qindex) {
@@ -317,8 +320,8 @@
   });
 
   document.querySelectorAll('.answer-input').forEach(input => {
-    input.addEventListener('change', () => { refreshAnsweredStates(); scheduleAutosave(); });
-    input.addEventListener('keyup', () => { refreshAnsweredStates(); scheduleAutosave(); });
+    input.addEventListener('change', () => { refreshAnsweredStates(); markAutosaveDirty(); });
+    input.addEventListener('keyup', () => { refreshAnsweredStates(); markAutosaveDirty(); });
   });
 
   // ---------------- Timer ----------------
@@ -339,7 +342,7 @@
     }
     if (remaining <= 0) {
       clearInterval(timerInterval);
-      clearInterval(autosaveInterval);
+      clearTimeout(autosaveHeartbeatTimer);
       examForm.dataset.autoSubmitted = 'true';
       suppressBlurLogging = true;
       alert('Time is up! Your exam will now be submitted automatically.');
@@ -406,12 +409,14 @@
   // not just at final submission. Runs on a short debounce after any answer
   // edit or navigation, plus a periodic heartbeat as a fallback.
   function performAutosave() {
-    if (examForm.dataset.autoSubmitted) return; // exam is ending, no need
+    if (examForm.dataset.autoSubmitted || autosaveInFlight || savedVersion === changeVersion) return;
 
     const formData = new FormData(examForm);
     formData.set('current_index', String(currentIndex));
+    const requestVersion = changeVersion;
 
     autosaveStatusEl.textContent = 'Saving…';
+    autosaveInFlight = true;
 
     fetch(autosaveUrl, {
       method: 'POST',
@@ -421,6 +426,7 @@
       .then(response => response.json())
       .then(data => {
         if (data.status === 'ok') {
+          savedVersion = requestVersion;
           const now = new Date();
           const hh = String(now.getHours()).padStart(2, '0');
           const mm = String(now.getMinutes()).padStart(2, '0');
@@ -434,7 +440,16 @@
       })
       .catch(() => {
         autosaveStatusEl.textContent = 'Offline - retrying…';
+      })
+      .finally(() => {
+        autosaveInFlight = false;
+        if (savedVersion !== changeVersion) scheduleAutosave();
       });
+  }
+
+  function markAutosaveDirty() {
+    changeVersion += 1;
+    scheduleAutosave();
   }
 
   function scheduleAutosave() {
@@ -442,13 +457,23 @@
     autosaveDebounceTimer = setTimeout(performAutosave, 1200);
   }
 
+  // Stagger the heartbeat so a whole laboratory does not hit MySQL on the
+  // same fixed boundary. A clean form does not create a database write.
+  function scheduleHeartbeat() {
+    const delay = 25000 + Math.floor(Math.random() * 10000);
+    autosaveHeartbeatTimer = setTimeout(() => {
+      performAutosave();
+      scheduleHeartbeat();
+    }, delay);
+  }
+
   // ---------------- Kick everything off ----------------
-  showQuestion(currentIndex);
+  showQuestion(currentIndex, false);
   refreshAnsweredStates();
 
   tick();
   timerInterval = setInterval(tick, 1000);
-  autosaveInterval = setInterval(performAutosave, 20000);
+  scheduleHeartbeat();
 })();
 </script>
 {% endblock %}
