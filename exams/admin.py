@@ -32,8 +32,12 @@ class SubjectAdmin(admin.ModelAdmin):
 
 @admin.register(Exam)
 class ExamAdmin(admin.ModelAdmin):
-    list_display = ('title', 'subject', 'time_limit_minutes', 'is_published', 'target_year_levels', 'access_code')
-    list_filter = ('is_published', 'subject')
+    list_display = (
+        'title', 'subject', 'time_limit_minutes', 'is_published',
+        'available_to_all_programs', 'target_year_levels', 'access_code',
+    )
+    list_filter = ('is_published', 'available_to_all_programs', 'subject', 'target_programs')
+    filter_horizontal = ('target_programs',)
 
 
 @admin.register(Question)

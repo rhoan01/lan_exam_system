@@ -7,7 +7,7 @@ scoring.
 
 ## Features
 
-- **Student registration/login** with ID Number, Name, Year, Section, Course
+- **Student registration/login** with ID Number, Name, Program, Year, and Section
   (ID Number doubles as the login username).
 - **Instructor accounts** created by the system administrator (via
   `createsuperuser` or the `create_instructor` command below) — instructors
@@ -102,11 +102,11 @@ Then, from any device on the same LAN, browse to:
      — this is what auto-grades the typed response.
 4. Click **Publish** once ready — only published exams appear to students.
 5. After students take it, click **View Results** to see each student's
-   name, ID number, course/year/section, and score.
+   name, ID number, program/year/section, and score.
 
 ## Typical student workflow
 
-1. **Register** with ID Number, Name, Year, Section, Course.
+1. **Register** with ID Number, Name, Program, Year, and Section.
 2. Log in → see **Available Exams** on the dashboard → **Start Exam**.
 3. Answer items in any order using the **question navigator** grid on the
    right (hover to preview, click to jump — skip and come back freely).

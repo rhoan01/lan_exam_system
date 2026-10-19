@@ -5,7 +5,7 @@
   <span class="eyebrow">Student workspace</span>
   <div class="page-header" style="margin:0; align-items:center;">
     <div class="page-header-copy"><h1>Hello, {{ user.first_name|default:user.username }}.</h1><p class="page-subtitle">Review your available assessments, continue with confidence, and keep track of completed work.</p></div>
-    {% if user.student_profile %}<div class="badge badge-neutral" style="background:rgba(255,255,255,.12); color:#e7edf8;">{{ user.student_profile.course }} · {{ user.student_profile.year_level }} · Section {{ user.student_profile.section }}</div>{% endif %}
+    {% if user.student_profile %}<div class="badge badge-neutral" style="background:rgba(255,255,255,.12); color:#e7edf8;">{{ user.student_profile.program }} · {{ user.student_profile.year_level }} · Section {{ user.student_profile.section }}</div>{% endif %}
   </div>
 </section>
 <div class="stats-grid">
@@ -26,7 +26,7 @@
       {% endfor %}
     </div>
   {% else %}
-    <div class="empty-state"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M6 3h9l4 4v14H6V3Z"/><path d="M14 3v5h5M9 13l2 2 4-4"/></svg></div><h3>You're all caught up</h3><p>No new exams are assigned to your year level and section right now.</p></div>
+    <div class="empty-state"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M6 3h9l4 4v14H6V3Z"/><path d="M14 3v5h5M9 13l2 2 4-4"/></svg></div><h3>You're all caught up</h3><p>No new exams are assigned to your program, year level, and section right now.</p></div>
   {% endif %}
 </section>
 <section class="card">

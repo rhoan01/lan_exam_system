@@ -94,11 +94,21 @@ class Exam(models.Model):
             "Leave blank for all sections."
         ),
     )
+    target_programs = models.ManyToManyField(
+        'accounts.Program',
+        blank=True,
+        related_name='exams',
+        help_text="Only students in these programs can see or take this exam.",
+    )
+    available_to_all_programs = models.BooleanField(
+        default=False,
+        help_text="Explicitly make this exam available to every academic program.",
+    )
     access_code = models.CharField(
         max_length=ACCESS_CODE_LENGTH, blank=True, null=True, unique=True,
         help_text=(
             "Auto-generated when the exam is published. Lets an irregular "
-            "student outside the target year level(s) unlock this exam."
+            "student outside the target program, year, or section unlock this exam."
         ),
     )
     created_at = models.DateTimeField(auto_now_add=True)
@@ -131,9 +141,24 @@ class Exam(models.Model):
         targets = self.target_section_list()
         return not targets or section in targets
 
+    def is_available_to_program(self, program):
+        """Program access is fail-closed unless 'all programs' is explicit."""
+        if self.available_to_all_programs:
+            return True
+        if program is None:
+            return False
+        prefetched = getattr(self, '_prefetched_objects_cache', {}).get('target_programs')
+        if prefetched is not None:
+            return any(target.pk == program.pk for target in prefetched)
+        return self.target_programs.filter(pk=program.pk).exists()
+
     def is_available_to_student(self, profile):
-        """Combines the year-level and section checks - both must pass."""
-        return self.is_available_to_year(profile.year_level) and self.is_available_to_section(profile.section)
+        """Program, year level, and section must all pass."""
+        return (
+            self.is_available_to_program(getattr(profile, 'program', None))
+            and self.is_available_to_year(profile.year_level)
+            and self.is_available_to_section(profile.section)
+        )
 
     def generate_access_code(self):
         alphabet = string.ascii_uppercase + string.digits

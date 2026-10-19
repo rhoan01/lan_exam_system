@@ -43,7 +43,7 @@ class ExamAttempt(models.Model):
 
 
 class ExamAccessGrant(models.Model):
-    """Records that a student outside an exam's target year level(s) has
+    """Records that a student outside an exam's target program/class has
     redeemed the exam's access code and is allowed to take it anyway
     (e.g. an irregular student)."""
     student = models.ForeignKey(

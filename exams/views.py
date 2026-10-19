@@ -112,6 +112,7 @@ def exam_create(request, subject_id):
             exam = form.save(commit=False)
             exam.subject = subject
             exam.save()
+            form.save_m2m()
             messages.success(request, f"Exam '{exam.title}' created. Now add questions (up to {MAX_ITEMS_PER_EXAM}).")
             return redirect('exams:exam_detail', exam_id=exam.id)
     else:
@@ -147,7 +148,9 @@ def exam_detail(request, exam_id):
 @instructor_required
 def exam_toggle_publish(request, exam_id):
     exam = get_object_or_404(Exam, id=exam_id, subject__instructor=request.user)
-    if exam.total_items() == 0:
+    if not exam.available_to_all_programs and not exam.target_programs.exists():
+        messages.error(request, "Assign at least one program before publishing this exam.")
+    elif exam.total_items() == 0:
         messages.error(request, "Add at least one question before publishing.")
     else:
         exam.is_published = not exam.is_published
@@ -664,10 +667,10 @@ def exam_results(request, exam_id):
     exam = get_object_or_404(Exam, id=exam_id, subject__instructor=request.user)
     result_filters = _result_filters(request)
     attempts_queryset = ExamAttempt.objects.filter(exam=exam, is_submitted=True).select_related(
-        'student', 'student__student_profile'
+        'student', 'student__student_profile', 'student__student_profile__program'
     )
     in_progress_queryset = ExamAttempt.objects.filter(exam=exam, is_submitted=False).select_related(
-        'student', 'student__student_profile'
+        'student', 'student__student_profile', 'student__student_profile__program'
     )
     attempts = list(_filter_attempts(
         attempts_queryset, result_filters
@@ -752,7 +755,7 @@ def export_exam_results_csv(request, exam_id):
     result_filters = _result_filters(request)
     attempts = _filter_attempts(
         ExamAttempt.objects.filter(exam=exam, is_submitted=True).select_related(
-            'student', 'student__student_profile'
+            'student', 'student__student_profile', 'student__student_profile__program'
         ),
         result_filters,
     ).order_by(*_student_name_ordering(result_filters, include_section=True))
@@ -764,7 +767,7 @@ def export_exam_results_csv(request, exam_id):
     writer = csv.writer(response)
     header = [
         'Subject Code', 'Subject Name', 'Exam Title',
-        'Student Name', 'ID Number', 'Course', 'Year Level', 'Section',
+        'Student Name', 'ID Number', 'Program', 'Year Level', 'Section',
         'Score', 'Total Points', 'Percentage', 'Tab Switches', 'Submitted At',
     ]
     writer.writerow(header)
@@ -782,7 +785,7 @@ def export_exam_results_csv(request, exam_id):
                 exam.title,
                 attempt.student.get_full_name(),
                 profile.id_number if profile else '',
-                profile.course if profile else '',
+                str(profile.program) if profile else '',
                 profile.year_level if profile else '',
                 profile.section if profile else '',
                 int(attempt.score),
@@ -815,7 +818,7 @@ def export_exam_results_pdf(request, exam_id):
     result_filters = _result_filters(request)
     attempts = list(_filter_attempts(
         ExamAttempt.objects.filter(exam=exam, is_submitted=True).select_related(
-            'student', 'student__student_profile'
+            'student', 'student__student_profile', 'student__student_profile__program'
         ),
         result_filters,
     ).order_by(*_student_name_ordering(result_filters, include_section=True)))
@@ -884,7 +887,7 @@ def export_exam_results_pdf(request, exam_id):
             elements.append(Paragraph(f"Section {section}", section_style))
 
             table_data = [[
-                'Student Name', 'ID Number', 'Course', 'Year',
+                'Student Name', 'ID Number', 'Program', 'Year',
                 'Score', '%', 'Tab\nSwitches', 'Submitted At',
             ]]
             for attempt in section_attempts:
@@ -892,7 +895,7 @@ def export_exam_results_pdf(request, exam_id):
                 table_data.append([
                     attempt.student.get_full_name(),
                     profile.id_number if profile else '',
-                    profile.course if profile else '',
+                    str(profile.program) if profile else '',
                     profile.year_level if profile else '',
                     f"{int(attempt.score)}/{int(attempt.total_points)}",
                     f"{attempt.percentage()}%",

@@ -1,7 +1,8 @@
 from django import forms
 from django.forms import BaseInlineFormSet, inlineformset_factory
+from django.db.models import Q
 
-from accounts.models import YEAR_LEVEL_CHOICES, SECTION_CHOICES
+from accounts.models import Program, YEAR_LEVEL_CHOICES, SECTION_CHOICES
 from .models import (
     Subject, Exam, Question, Choice, AnswerKey, MatchingPair,
     ImageIdentificationItem,
@@ -36,10 +37,15 @@ class ExamForm(forms.ModelForm):
 
     class Meta:
         model = Exam
-        fields = ['title', 'instructions', 'time_limit_minutes', 'is_published', 'shuffle_questions', 'shuffle_choices']
+        fields = [
+            'title', 'instructions', 'time_limit_minutes',
+            'available_to_all_programs', 'target_programs',
+            'is_published', 'shuffle_questions', 'shuffle_choices',
+        ]
         widgets = {
             'instructions': forms.Textarea(attrs={'rows': 3}),
             'time_limit_minutes': forms.NumberInput(attrs={'min': 1, 'max': 600}),
+            'target_programs': forms.CheckboxSelectMultiple,
         }
         help_texts = {
             'time_limit_minutes': 'Adjustable countdown timer shown to students, in minutes.',
@@ -47,9 +53,14 @@ class ExamForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        program_filter = Q(is_active=True)
         if self.instance and self.instance.pk:
+            program_filter |= Q(exams=self.instance)
             self.fields['target_year_levels'].initial = self.instance.target_year_level_list()
             self.fields['target_sections'].initial = self.instance.target_section_list()
+        self.fields['target_programs'].queryset = Program.objects.filter(
+            program_filter
+        ).distinct()
 
     def save(self, commit=True):
         exam = super().save(commit=False)
@@ -57,7 +68,21 @@ class ExamForm(forms.ModelForm):
         exam.target_sections = ','.join(self.cleaned_data.get('target_sections', []))
         if commit:
             exam.save()
+            self.save_m2m()
         return exam
+
+    def clean(self):
+        cleaned = super().clean()
+        all_programs = cleaned.get('available_to_all_programs')
+        target_programs = cleaned.get('target_programs')
+        if not all_programs and not target_programs:
+            self.add_error(
+                'target_programs',
+                "Select at least one program, or explicitly choose all programs.",
+            )
+        if all_programs:
+            cleaned['target_programs'] = []
+        return cleaned
 
 
 class QuestionForm(forms.ModelForm):

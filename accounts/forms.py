@@ -1,6 +1,6 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
-from .models import User, StudentProfile, YEAR_LEVEL_CHOICES, SECTION_CHOICES
+from .models import Program, User, StudentProfile, YEAR_LEVEL_CHOICES, SECTION_CHOICES
 
 
 class StudentRegistrationForm(UserCreationForm):
@@ -16,14 +16,22 @@ class StudentRegistrationForm(UserCreationForm):
         choices=YEAR_LEVEL_CHOICES,
     )
     section = forms.ChoiceField(label="Section", choices=SECTION_CHOICES)
-    course = forms.CharField(label="Course", max_length=100)
+    program = forms.ModelChoiceField(
+        label="Program / Course",
+        queryset=Program.objects.none(),
+        empty_label="Select your program",
+    )
 
     class Meta:
         model = User
         fields = (
             'id_number', 'first_name', 'last_name', 'year_level', 'section',
-            'course', 'password1', 'password2',
+            'program', 'password1', 'password2',
         )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['program'].queryset = Program.objects.filter(is_active=True)
 
     def clean_id_number(self):
         id_number = self.cleaned_data['id_number'].strip()
@@ -46,7 +54,8 @@ class StudentRegistrationForm(UserCreationForm):
                 id_number=self.cleaned_data['id_number'],
                 year_level=self.cleaned_data['year_level'],
                 section=self.cleaned_data['section'],
-                course=self.cleaned_data['course'],
+                program=self.cleaned_data['program'],
+                course=self.cleaned_data['program'].code,
             )
         return user
 

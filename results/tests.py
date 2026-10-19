@@ -7,7 +7,7 @@ from django.test import SimpleTestCase, TestCase
 from django.test.client import RequestFactory
 from django.urls import reverse
 
-from accounts.models import StudentProfile
+from accounts.models import Program, StudentProfile
 from exams.models import Choice, Exam, ImageIdentificationItem, Question, Subject
 from .grading import grade_answer, matches_accepted_answer, normalize_answer
 
@@ -90,11 +90,13 @@ class ImageIdentificationIntegrationTests(TestCase):
             username='student', password='test-pass', role=User.STUDENT,
             first_name='Test', last_name='Student',
         )
+        self.program = Program.objects.create(code='BSIT', name='Information Technology')
         StudentProfile.objects.create(
             user=self.student,
             id_number='2026-0001',
             year_level='1st Year',
             section='A',
+            program=self.program,
             course='BSIT',
         )
         subject = Subject.objects.create(
@@ -103,6 +105,7 @@ class ImageIdentificationIntegrationTests(TestCase):
         self.exam = Exam.objects.create(
             subject=subject, title='Parts', is_published=True, shuffle_questions=False
         )
+        self.exam.target_programs.add(self.program)
         self.question = Question.objects.create(
             exam=self.exam,
             order=1,
@@ -164,3 +167,85 @@ class ImageIdentificationIntegrationTests(TestCase):
         response = self.client.get(reverse('results:take_exam', args=[self.exam.id]))
         self.assertContains(response, 'value="My first answer"')
         self.assertContains(response, 'value="My second answer"')
+
+
+class ProgramExamAccessTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        instructor = User.objects.create_user(
+            username='program-teacher', password='test-pass', role=User.INSTRUCTOR
+        )
+        self.it = Program.objects.create(code='BSIT', name='Information Technology')
+        self.crim = Program.objects.create(code='BSCRIM', name='Criminology')
+        subject = Subject.objects.create(
+            name='Networking', code='NET101', instructor=instructor
+        )
+        self.exam = Exam.objects.create(
+            subject=subject,
+            title='IT Network Exam',
+            is_published=True,
+            target_year_levels='1st Year',
+            target_sections='C',
+        )
+        self.exam.target_programs.add(self.it)
+        self.it_student = self.create_student('IT-001', self.it)
+        self.crim_student = self.create_student('CRIM-001', self.crim)
+
+    @staticmethod
+    def create_student(username, program):
+        User = get_user_model()
+        student = User.objects.create_user(
+            username=username,
+            password='test-pass',
+            role=User.STUDENT,
+            first_name='Test',
+            last_name=program.code,
+        )
+        StudentProfile.objects.create(
+            user=student,
+            id_number=username,
+            year_level='1st Year',
+            section='C',
+            program=program,
+            course=program.code,
+        )
+        return student
+
+    def test_matching_program_student_can_see_and_open_exam(self):
+        self.client.force_login(self.it_student)
+
+        dashboard = self.client.get(reverse('results:student_dashboard'))
+        exam_page = self.client.get(reverse('results:take_exam', args=[self.exam.id]))
+
+        self.assertContains(dashboard, self.exam.title)
+        self.assertEqual(exam_page.status_code, 200)
+
+    def test_same_year_and_section_but_different_program_is_denied(self):
+        self.client.force_login(self.crim_student)
+
+        dashboard = self.client.get(reverse('results:student_dashboard'))
+        exam_page = self.client.get(reverse('results:take_exam', args=[self.exam.id]))
+
+        self.assertNotContains(dashboard, self.exam.title)
+        self.assertRedirects(exam_page, reverse('results:student_dashboard'))
+        self.assertFalse(
+            self.exam.attempts.filter(student=self.crim_student).exists()
+        )
+
+    def test_exam_without_program_assignment_fails_closed(self):
+        self.exam.target_programs.clear()
+        self.client.force_login(self.it_student)
+
+        dashboard = self.client.get(reverse('results:student_dashboard'))
+
+        self.assertNotContains(dashboard, self.exam.title)
+
+    def test_explicit_all_programs_setting_allows_other_program(self):
+        self.exam.target_programs.clear()
+        self.exam.available_to_all_programs = True
+        self.exam.save(update_fields=['available_to_all_programs'])
+        self.client.force_login(self.crim_student)
+
+        dashboard = self.client.get(reverse('results:student_dashboard'))
+
+        self.assertContains(dashboard, self.exam.title)

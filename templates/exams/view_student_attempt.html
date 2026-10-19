@@ -4,7 +4,7 @@
 <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="{% url 'exams:exam_detail' attempt.exam.id %}">{{ attempt.exam.title }}</a><span aria-hidden="true">/</span><a href="{% url 'exams:exam_results' attempt.exam.id %}">Results</a><span aria-hidden="true">/</span><span>{{ attempt.student.get_full_name }}</span></nav>
 <section class="hero-panel" style="margin-bottom:20px;">
   <span class="eyebrow">Student submission</span><h1>{{ attempt.student.get_full_name }}</h1>
-  <p class="page-subtitle">{{ attempt.student.student_profile.id_number }} · {{ attempt.student.student_profile.course }} · {{ attempt.student.student_profile.year_level }} · Section {{ attempt.student.student_profile.section }}</p>
+  <p class="page-subtitle">{{ attempt.student.student_profile.id_number }} · {{ attempt.student.student_profile.program }} · {{ attempt.student.student_profile.year_level }} · Section {{ attempt.student.student_profile.section }}</p>
   <div class="meta-list" style="margin-top:18px; color:#c7d2e3;"><span>{{ attempt.exam.subject.code }} · {{ attempt.exam.title }}</span><span>Submitted {{ attempt.submitted_at|date:"M d, Y H:i" }}</span>{% if attempt.tab_switch_count %}<span class="badge badge-draft">{{ attempt.tab_switch_count }} tab switch{{ attempt.tab_switch_count|pluralize }}</span>{% endif %}</div>
 </section>
 <div class="stats-grid"><div class="stat-card"><div class="stat-label">Score</div><span class="stat-value">{{ attempt.score|floatformat:0 }} / {{ attempt.total_points|floatformat:0 }}</span></div><div class="stat-card"><div class="stat-label">Percentage</div><span class="stat-value">{{ attempt.percentage }}%</span></div><div class="stat-card"><div class="stat-label">Questions</div><span class="stat-value">{{ answers|length }}</span></div></div>

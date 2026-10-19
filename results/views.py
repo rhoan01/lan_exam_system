@@ -17,9 +17,7 @@ from .models import ExamAttempt, StudentAnswer, ExamAccessGrant
 
 
 def _student_can_access(exam, user):
-    """An exam is available to a student if it targets their year level
-    (or has no year-level restriction), or if they've redeemed the exam's
-    access code (e.g. an irregular student outside the target year)."""
+    """Program, year and section must match, unless an access code was redeemed."""
     profile = getattr(user, 'student_profile', None)
     if profile and exam.is_available_to_student(profile):
         return True
@@ -39,7 +37,7 @@ def student_dashboard(request):
 
     candidate_exams = Exam.objects.filter(is_published=True).exclude(
         id__in=attempted_exam_ids
-    ).select_related('subject')
+    ).select_related('subject').prefetch_related('target_programs')
 
     available_exams = [
         exam for exam in candidate_exams

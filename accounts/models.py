@@ -18,6 +18,27 @@ SECTION_CHOICES = (
 )
 
 
+class Program(models.Model):
+    """A trusted academic program used to scope student exam access."""
+
+    code = models.CharField(max_length=30, unique=True)
+    name = models.CharField(max_length=150)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['code']
+
+    def save(self, *args, **kwargs):
+        self.code = self.code.strip().upper()
+        self.name = self.name.strip()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        if self.name.casefold() == self.code.casefold():
+            return self.code
+        return f"{self.code} — {self.name}"
+
+
 class User(AbstractUser):
     STUDENT = 'student'
     INSTRUCTOR = 'instructor'
@@ -49,7 +70,12 @@ class StudentProfile(models.Model):
     id_number = models.CharField(max_length=30, unique=True)
     year_level = models.CharField(max_length=20, choices=YEAR_LEVEL_CHOICES)
     section = models.CharField(max_length=20, choices=SECTION_CHOICES)
-    course = models.CharField(max_length=100)
+    # Retained as a non-editable compatibility snapshot for old exports and
+    # migrations. Authorization uses the Program foreign key below.
+    course = models.CharField(max_length=100, editable=False)
+    program = models.ForeignKey(
+        Program, on_delete=models.PROTECT, related_name='students'
+    )
 
     def __str__(self):
         return f"{self.id_number} - {self.user.get_full_name() or self.user.username}"

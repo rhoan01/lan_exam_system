@@ -69,13 +69,13 @@
       <div class="section-label">Section {{ section }} · {{ attempts|length }} student{{ attempts|length|pluralize }}</div>
       <div class="table-wrap" style="margin-bottom:20px;">
         <table>
-          <thead><tr><th>Student <span class="sort-hint">{% if name_order == 'desc' %}Z–A{% else %}A–Z{% endif %}</span></th><th>ID number</th><th>Course / year</th><th>Score</th><th>Result</th><th>Tab switches</th><th>Submitted</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Student <span class="sort-hint">{% if name_order == 'desc' %}Z–A{% else %}A–Z{% endif %}</span></th><th>ID number</th><th>Program / year</th><th>Score</th><th>Result</th><th>Tab switches</th><th>Submitted</th><th>Actions</th></tr></thead>
           <tbody>
           {% for attempt in attempts %}
             <tr>
               <td><strong>{{ attempt.student.get_full_name }}</strong></td>
               <td>{{ attempt.student.student_profile.id_number }}</td>
-              <td>{{ attempt.student.student_profile.course }} / {{ attempt.student.student_profile.year_level }}</td>
+              <td>{{ attempt.student.student_profile.program }} / {{ attempt.student.student_profile.year_level }}</td>
               <td>{{ attempt.score|floatformat:0 }} / {{ attempt.total_points|floatformat:0 }}</td>
               <td><span class="badge {% if attempt.percentage >= 75 %}badge-published{% else %}badge-warning{% endif %}">{{ attempt.percentage }}%</span></td>
               <td>{% if attempt.tab_switch_count %}<span class="badge badge-draft">{{ attempt.tab_switch_count }}</span>{% else %}<span class="muted">0</span>{% endif %}</td>

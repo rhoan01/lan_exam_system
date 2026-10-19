@@ -15,6 +15,7 @@
         <span class="meta-item">{{ exam.time_limit_minutes }} minute timer</span>
         <span class="meta-item">{{ exam.total_items }} / {{ max_items }} questions</span>
         <span class="meta-item">{{ exam.total_points }} total points</span>
+        <span class="meta-item">{% if exam.available_to_all_programs %}All programs{% else %}{% with programs=exam.target_programs.all %}{% if programs %}{{ programs|join:", " }}{% else %}No program assigned{% endif %}{% endwith %}{% endif %}</span>
         <span class="meta-item">{% with years=exam.target_year_level_list %}{% if years %}{{ years|join:", " }}{% else %}All year levels{% endif %}{% endwith %}</span>
         <span class="meta-item">{% with sections=exam.target_section_list %}{% if sections %}Section {{ sections|join:", " }}{% else %}All sections{% endif %}{% endwith %}</span>
       </div>
@@ -22,6 +23,13 @@
     {% if exam.is_published %}<span class="badge badge-published">Published</span>{% else %}<span class="badge badge-neutral" style="background:rgba(255,255,255,.12); color:#e7edf8;">Draft</span>{% endif %}
   </div>
 </section>
+
+{% if not exam.available_to_all_programs and not exam.target_programs.exists %}
+  <div class="notice notice-danger" style="margin-bottom:20px;">
+    <strong>Program assignment required.</strong>
+    This exam is hidden from every student until you select at least one program in Exam settings.
+  </div>
+{% endif %}
 
 <div class="stats-grid">
   <div class="stat-card"><div class="stat-label">Questions</div><span class="stat-value">{{ exam.total_items }}</span></div>
@@ -32,7 +40,7 @@
 {% if exam.is_published and exam.access_code %}
   <div class="notice notice-warning" style="margin-bottom:20px;">
     <strong>Irregular student access</strong><span class="access-code">{{ exam.access_code }}</span>
-    <span class="helptext">Share this code only with students outside the assigned year level or section who need access.</span>
+    <span class="helptext">Share this code only with students outside the assigned program, year level, or section who need access.</span>
   </div>
 {% endif %}
 

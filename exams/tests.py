@@ -9,12 +9,13 @@ from django.test import SimpleTestCase
 from django.urls import reverse
 from PIL import Image
 
-from accounts.models import StudentProfile
+from accounts.models import Program, StudentProfile
 from results.models import ExamAttempt
 
 from .models import (
     Exam, ImageIdentificationItem, Question, Subject, validate_question_image,
 )
+from .forms import ExamForm
 from .parsing import BulkImportError, parse_bulk_questions
 
 
@@ -143,6 +144,56 @@ class ImageUploadValidationTests(SimpleTestCase):
             validate_question_image(disguised_file)
 
 
+class ExamProgramAssignmentFormTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        instructor = User.objects.create_user(
+            username='program-form-teacher', password='test-pass', role=User.INSTRUCTOR
+        )
+        self.subject = Subject.objects.create(
+            name='Program Testing', code='PROG101', instructor=instructor
+        )
+        self.program = Program.objects.create(code='BSIT', name='Information Technology')
+
+    def form_data(self, **overrides):
+        data = {
+            'title': 'Program-scoped exam',
+            'instructions': '',
+            'time_limit_minutes': '60',
+            'target_programs': [str(self.program.pk)],
+            'target_year_levels': ['1st Year'],
+            'target_sections': ['C'],
+        }
+        data.update(overrides)
+        return data
+
+    def test_requires_program_assignment_or_explicit_all_programs(self):
+        form = ExamForm(data=self.form_data(target_programs=[]))
+
+        self.assertFalse(form.is_valid())
+        self.assertIn('target_programs', form.errors)
+
+    def test_saves_selected_target_programs(self):
+        form = ExamForm(data=self.form_data())
+        self.assertTrue(form.is_valid(), form.errors)
+        form.instance.subject = self.subject
+
+        exam = form.save()
+
+        self.assertEqual(list(exam.target_programs.all()), [self.program])
+        self.assertFalse(exam.available_to_all_programs)
+
+    def test_explicit_all_programs_clears_specific_targets(self):
+        form = ExamForm(data=self.form_data(available_to_all_programs='on'))
+        self.assertTrue(form.is_valid(), form.errors)
+        form.instance.subject = self.subject
+
+        exam = form.save()
+
+        self.assertTrue(exam.available_to_all_programs)
+        self.assertFalse(exam.target_programs.exists())
+
+
 class ExamResultNameFilterTests(TestCase):
     def setUp(self):
         User = get_user_model()
@@ -153,6 +204,7 @@ class ExamResultNameFilterTests(TestCase):
             name='Database Systems', code='DB101', instructor=self.instructor
         )
         self.exam = Exam.objects.create(subject=subject, title='Midterm Exam')
+        self.program = Program.objects.create(code='BSIT', name='Information Technology')
 
         self.maria_cruz = self.create_student('S-001', 'Maria Elena', 'Dela Cruz', 'B')
         self.mario_santos = self.create_student('S-002', 'Mario', 'Santos', 'A')
@@ -169,8 +221,7 @@ class ExamResultNameFilterTests(TestCase):
         ExamAttempt.objects.create(student=self.maria_santos, exam=self.exam)
         self.client.force_login(self.instructor)
 
-    @staticmethod
-    def create_student(id_number, first_name, last_name, section):
+    def create_student(self, id_number, first_name, last_name, section):
         User = get_user_model()
         student = User.objects.create_user(
             username=id_number, password='test-pass', role=User.STUDENT,
@@ -181,6 +232,7 @@ class ExamResultNameFilterTests(TestCase):
             id_number=id_number,
             year_level='1st Year',
             section=section,
+            program=self.program,
             course='BSIT',
         )
         return student
@@ -268,11 +320,13 @@ class ImageIdentificationEditorTests(TestCase):
             username='image-student', password='test-pass', role=User.STUDENT,
             first_name='Image', last_name='Student',
         )
+        self.program = Program.objects.create(code='BSIT', name='Information Technology')
         StudentProfile.objects.create(
             user=self.student,
             id_number='IMG-001',
             year_level='1st Year',
             section='A',
+            program=self.program,
             course='BSIT',
         )
         subject = Subject.objects.create(
