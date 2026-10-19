@@ -13,7 +13,7 @@ environment is plain Windows Server 2019 + Python + MySQL/MariaDB + Waitress.
 
 | | Development / testing | Examination day |
 |---|---|---|
-| Command | `python manage.py runserver` | `waitress-serve --listen=0.0.0.0:8000 examsystem.wsgi:application` |
+| Command | `python manage.py runserver` | `waitress-serve --listen=0.0.0.0:80 examsystem.wsgi:application` |
 | Database | SQLite (`db.sqlite3`) | MySQL / MariaDB |
 | `DJANGO_DEBUG` | not set (defaults to `True`) | `False` |
 | Who can connect | just your own PC | every PC on the school LAN |
@@ -130,7 +130,7 @@ optional — sensible development defaults are used if unset):
 | `DJANGO_DEBUG` | `False` on exam day | `False` |
 | `DJANGO_SECRET_KEY` | Random secret, keep private | (long random string) |
 | `DJANGO_ALLOWED_HOSTS` | Comma-separated hosts allowed to connect | `192.168.1.10,localhost,127.0.0.1` |
-| `DJANGO_CSRF_TRUSTED_ORIGINS` | Only needed if using HTTPS or a hostname | `http://examserver:8000` |
+| `DJANGO_CSRF_TRUSTED_ORIGINS` | Trusted browser origins | `http://exam.ite` |
 | `DB_ENGINE` | `mysql` or leave unset for SQLite | `mysql` |
 | `DB_NAME` / `DB_USER` / `DB_PASSWORD` / `DB_HOST` / `DB_PORT` | MySQL/MariaDB connection | see above |
 
@@ -167,19 +167,19 @@ your school's LAN addressing.
 
 ### Windows Firewall
 
-Allow inbound TCP port 8000:
+Allow inbound standard HTTP port 80:
 
 ```bat
-netsh advfirewall firewall add rule name="Exam System" dir=in action=allow protocol=TCP localport=8000
+netsh advfirewall firewall add rule name="Exam System" dir=in action=allow protocol=TCP localport=80
 ```
 
 (Or via GUI: **Windows Defender Firewall with Advanced Security → Inbound
-Rules → New Rule → Port → TCP 8000 → Allow the connection**.)
+Rules → New Rule → Port → TCP 80 → Allow the connection**.)
 
 ### Starting the server
 
 ```bat
-waitress-serve --listen=0.0.0.0:8000 examsystem.wsgi:application
+waitress-serve --listen=0.0.0.0:80 examsystem.wsgi:application
 ```
 
 Listening on `0.0.0.0` (not `127.0.0.1`) is what makes the server reachable
@@ -190,7 +190,7 @@ from other PCs on the LAN, not just the server itself.
 On each student PC, open a browser and go to:
 
 ```
-http://192.168.1.10:8000
+http://exam.ite/
 ```
 
 (replace with your server's actual static IP). Consider writing this URL on
@@ -235,7 +235,7 @@ database changes while an examination is actively in progress.
 
 **One-time network setup:** double-click
 `deployment\configure_firewall_admin.bat` and accept the Administrator
-prompt. It limits TCP 8000 access to the local subnet.
+prompt. It limits TCP 80 access to the local subnet.
 
 **Before the exam:** double-click `deploy\start_exam_server.bat`. Leave the
 Command Prompt window open — closing it stops the web server.
@@ -269,7 +269,7 @@ Before trusting this system with a real exam, test it with a load close to
    [Locust](https://locust.io/) or [k6](https://k6.io/) from a separate
    machine on the LAN to simulate ~600 virtual students logging in, opening
    an exam, and submitting answers, pointed at
-   `http://<server-ip>:8000`.
+   `http://exam.ite/`.
 3. At minimum, test: simultaneous logins, simultaneous exam loading,
    simultaneous answer submission, an instructor viewing results while
    students are still testing, and toggling an exam's publish/lock status
@@ -290,7 +290,7 @@ practical minimum.
 
 | Symptom | Likely cause / fix |
 |---|---|
-| Student PC gets "This site can't be reached" | Server not started, wrong IP, or firewall blocking port 8000. Confirm `ipconfig` on the server for the correct IP, confirm the firewall rule from Section 7. |
+| Student PC gets "This site can't be reached" | Server not started, `exam.ite` is not mapped to the server IP, or the firewall is blocking port 80. Confirm the hostname script and firewall rule from Section 7. |
 | Django shows "Bad Request (400)" | The URL/IP a student used isn't in `DJANGO_ALLOWED_HOSTS`. Add it and restart the server. |
 | "database is locked" errors during the exam | Still running on SQLite under real concurrent load. Switch to MySQL/MariaDB per Section 4. |
 | CSS/styling missing after `DJANGO_DEBUG=False` | Run `python manage.py collectstatic --noinput` before starting the server. |

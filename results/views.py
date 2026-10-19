@@ -17,10 +17,12 @@ from .models import ExamAttempt, StudentAnswer, ExamAccessGrant
 
 
 def _student_can_access(exam, user):
-    """Program, year and section must match, unless an access code was redeemed."""
+    """Require class eligibility, an enabled gate, and a current unlock."""
     profile = getattr(user, 'student_profile', None)
-    if profile and exam.is_available_to_student(profile):
-        return True
+    if not profile or not exam.is_available_to_student(profile):
+        return False
+    if not exam.access_code_enabled or not exam.access_code:
+        return False
     return ExamAccessGrant.objects.filter(student=user, exam=exam).exists()
 
 
@@ -35,13 +37,15 @@ def student_dashboard(request):
         student=request.user
     ).values_list('exam_id', flat=True))
 
-    candidate_exams = Exam.objects.filter(is_published=True).exclude(
+    candidate_exams = Exam.objects.filter(
+        is_published=True, access_code_enabled=True, id__in=granted_exam_ids,
+    ).exclude(
         id__in=attempted_exam_ids
     ).select_related('subject').prefetch_related('target_programs')
 
     available_exams = [
         exam for exam in candidate_exams
-        if (profile and exam.is_available_to_student(profile)) or exam.id in granted_exam_ids
+        if profile and exam.is_available_to_student(profile)
     ]
 
     completed_attempts = ExamAttempt.objects.filter(
@@ -62,9 +66,24 @@ def redeem_access_code(request):
             messages.error(request, "Please enter an access code.")
             return redirect('results:student_dashboard')
 
-        exam = Exam.objects.filter(access_code=code, is_published=True).first()
+        exam = Exam.objects.filter(
+            access_code=code,
+            access_code_enabled=True,
+            is_published=True,
+        ).first()
         if not exam:
-            messages.error(request, "That access code isn't valid (or the exam isn't published yet).")
+            messages.error(
+                request,
+                "That code is invalid, has changed, is disabled, or the exam is not published.",
+            )
+            return redirect('results:student_dashboard')
+
+        profile = getattr(request.user, 'student_profile', None)
+        if not profile or not exam.is_available_to_student(profile):
+            messages.error(
+                request,
+                "This exam is not assigned to your program, year level, and section.",
+            )
             return redirect('results:student_dashboard')
 
         ExamAccessGrant.objects.get_or_create(student=request.user, exam=exam)

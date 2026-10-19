@@ -13,6 +13,7 @@ urlpatterns = [
     path('exams/<int:exam_id>/edit/', views.exam_edit, name='exam_edit'),
     path('exams/<int:exam_id>/', views.exam_detail, name='exam_detail'),
     path('exams/<int:exam_id>/publish/', views.exam_toggle_publish, name='exam_toggle_publish'),
+    path('exams/<int:exam_id>/access/', views.exam_access_control, name='exam_access_control'),
     path('exams/<int:exam_id>/delete/', views.exam_delete, name='exam_delete'),
     path('exams/<int:exam_id>/questions/add/', views.question_create, name='question_create'),
     path('exams/<int:exam_id>/questions/import/', views.bulk_import_questions, name='bulk_import_questions'),

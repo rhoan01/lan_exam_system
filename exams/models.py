@@ -13,7 +13,7 @@ from django.dispatch import receiver
 from PIL import Image, UnidentifiedImageError
 
 MAX_ITEMS_PER_EXAM = 100
-ACCESS_CODE_LENGTH = 8
+ACCESS_CODE_LENGTH = 5
 MAX_QUESTION_IMAGE_SIZE = 5 * 1024 * 1024
 
 
@@ -107,9 +107,12 @@ class Exam(models.Model):
     access_code = models.CharField(
         max_length=ACCESS_CODE_LENGTH, blank=True, null=True, unique=True,
         help_text=(
-            "Auto-generated when the exam is published. Lets an irregular "
-            "student outside the target program, year, or section unlock this exam."
+            "Five-character code required before an eligible student can open this exam."
         ),
+    )
+    access_code_enabled = models.BooleanField(
+        default=False,
+        help_text="Students cannot open this exam unless code access is enabled.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -164,7 +167,10 @@ class Exam(models.Model):
         alphabet = string.ascii_uppercase + string.digits
         while True:
             code = ''.join(random.choices(alphabet, k=ACCESS_CODE_LENGTH))
-            if not Exam.objects.filter(access_code=code).exists():
+            matches = Exam.objects.filter(access_code=code)
+            if self.pk:
+                matches = matches.exclude(pk=self.pk)
+            if not matches.exists():
                 return code
 
     def __str__(self):

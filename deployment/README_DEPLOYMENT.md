@@ -184,8 +184,9 @@ Key ones for exam day:
 ```
 DJANGO_SECRET_KEY=<a long random string — do not reuse the example one>
 DJANGO_DEBUG=False
-DJANGO_ALLOWED_HOSTS=<server LAN IP>,localhost,127.0.0.1
-DJANGO_CSRF_TRUSTED_ORIGINS=http://<server LAN IP>:8000
+DJANGO_ALLOWED_HOSTS=exam.ite,<server LAN IP>,localhost,127.0.0.1
+DJANGO_CSRF_TRUSTED_ORIGINS=http://exam.ite,http://<server LAN IP>
+LAN_HOSTNAME=exam.ite
 ```
 
 `DJANGO_DEBUG=False` is important for a real exam: with `DEBUG=True`,
@@ -247,13 +248,13 @@ waitress-serve --help
 ## 11. Waitress startup command
 
 ```cmd
-waitress-serve --listen=0.0.0.0:8000 --threads=32 --connection-limit=400 --backlog=2048 --channel-timeout=20 examsystem.wsgi:application
+waitress-serve --listen=0.0.0.0:80 --threads=32 --connection-limit=400 --backlog=2048 --channel-timeout=20 examsystem.wsgi:application
 ```
 
 - `examsystem.wsgi:application` is this project's actual WSGI module —
   confirmed from `examsystem/wsgi.py`.
-- `--listen=0.0.0.0:8000` makes it listen on **all** network interfaces
-  on port 8000, so it's reachable from other computers on the LAN (not
+- `--listen=0.0.0.0:80` makes it listen on **all** network interfaces
+  on standard HTTP port 80, so the URL does not need an explicit port (not
   just the server itself).
 - `--threads=32` lets Waitress handle multiple requests concurrently
   within one process, which lets short requests from hundreds of students be
@@ -268,17 +269,17 @@ script. The older `start_waitress.bat` delegates to the same launcher.
 ## 12. Windows Firewall configuration
 
 By default, Windows Firewall blocks unsolicited inbound connections on
-port 8000. To allow student computers to reach the server:
+port 80. To allow student computers to reach the server:
 
 1. Open **Windows Defender Firewall with Advanced Security**
    (search for it in the Start menu).
 2. Click **Inbound Rules** → **New Rule...**
 3. Rule type: **Port**
-4. Protocol: **TCP**, Specific local port: **8000**
+4. Protocol: **TCP**, Specific local port: **80**
 5. Action: **Allow the connection**
 6. Profile: check **Domain** and **Private** (uncheck **Public** unless
    this server is genuinely on a public network, which it shouldn't be)
-7. Name it something like "LAN Exam System (port 8000)"
+7. Name it something like "LAN Exam System (port 80)"
 
 If Windows prompts to allow `python.exe` or `waitress-serve` through
 the firewall the first time you run the server, you can also just
@@ -314,17 +315,33 @@ Once set, use that fixed IP consistently in `DJANGO_ALLOWED_HOSTS`,
 
 ## 14. How student computers access the system
 
+`exam.ite` must resolve to the server's static IP. Use either of these
+deployment methods:
+
+- Preferred for a managed campus: add an `exam.ite` A record to the campus
+  DNS server, pointing to the examination server's static IP.
+- Without campus DNS: copy the `deployment` folder to each Windows lab PC
+  and run this once as administrator (the default IP in the script is
+  `192.168.0.244`; pass a different IP when needed):
+
+  ```cmd
+  configure_exam_hostname_client_admin.bat 192.168.0.244
+  ```
+
+  For hundreds of managed PCs, deploy the same hosts-file entry through
+  Group Policy instead of visiting every machine manually.
+
 Once the server is running and reachable, students open a web browser
 on their lab computer and go to:
 
 ```
-http://<server-LAN-IP>:8000/
+http://exam.ite/
 ```
 
 For example, if the server's static IP is `192.168.1.10`:
 
 ```
-http://192.168.1.10:8000/
+http://exam.ite/
 ```
 
 All computers must be on the **same LAN** (connected to the same
@@ -347,10 +364,10 @@ internet-facing.
    (or just double-click `run_exam_system.bat` in File Explorer, after
    editing it once with your real IP/credentials — see the file's
    comments).
-5. Confirm you see `Serving on http://0.0.0.0:8000` in the console
+5. Confirm you see `Serving on http://0.0.0.0:80` in the console
    with no errors.
 6. From another computer on the LAN, browse to
-   `http://<server-IP>:8000/` to confirm it loads before students
+   `http://exam.ite/` to confirm it loads before students
    arrive.
 
 Leave that Command Prompt window open and running for the entire
@@ -457,7 +474,7 @@ With the production server running, execute the included dependency-free
 connection burst test from the server or, preferably, another wired machine:
 
 ```cmd
-python deployment\load_test_600.py --url http://SERVER-IP:8000/login/
+python deployment\load_test_600.py --url http://exam.ite/login/
 ```
 
 It requires 600 successful responses. This verifies the HTTP burst path; the

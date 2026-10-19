@@ -10,6 +10,7 @@ from django.urls import reverse
 from accounts.models import Program, StudentProfile
 from exams.models import Choice, Exam, ImageIdentificationItem, Question, Subject
 from .grading import grade_answer, matches_accepted_answer, normalize_answer
+from .models import ExamAccessGrant
 
 
 class ProgrammingMultipleChoiceGradingTests(SimpleTestCase):
@@ -103,9 +104,15 @@ class ImageIdentificationIntegrationTests(TestCase):
             name='Hardware', code='HW101', instructor=self.instructor
         )
         self.exam = Exam.objects.create(
-            subject=subject, title='Parts', is_published=True, shuffle_questions=False
+            subject=subject,
+            title='Parts',
+            is_published=True,
+            shuffle_questions=False,
+            access_code_enabled=True,
+            access_code='PART5',
         )
         self.exam.target_programs.add(self.program)
+        ExamAccessGrant.objects.create(student=self.student, exam=self.exam)
         self.question = Question.objects.create(
             exam=self.exam,
             order=1,
@@ -172,13 +179,13 @@ class ImageIdentificationIntegrationTests(TestCase):
 class ProgramExamAccessTests(TestCase):
     def setUp(self):
         User = get_user_model()
-        instructor = User.objects.create_user(
+        self.instructor = User.objects.create_user(
             username='program-teacher', password='test-pass', role=User.INSTRUCTOR
         )
         self.it = Program.objects.create(code='BSIT', name='Information Technology')
         self.crim = Program.objects.create(code='BSCRIM', name='Criminology')
         subject = Subject.objects.create(
-            name='Networking', code='NET101', instructor=instructor
+            name='Networking', code='NET101', instructor=self.instructor
         )
         self.exam = Exam.objects.create(
             subject=subject,
@@ -186,6 +193,8 @@ class ProgramExamAccessTests(TestCase):
             is_published=True,
             target_year_levels='1st Year',
             target_sections='C',
+            access_code_enabled=True,
+            access_code='ABCDE',
         )
         self.exam.target_programs.add(self.it)
         self.it_student = self.create_student('IT-001', self.it)
@@ -212,6 +221,7 @@ class ProgramExamAccessTests(TestCase):
         return student
 
     def test_matching_program_student_can_see_and_open_exam(self):
+        ExamAccessGrant.objects.create(student=self.it_student, exam=self.exam)
         self.client.force_login(self.it_student)
 
         dashboard = self.client.get(reverse('results:student_dashboard'))
@@ -244,8 +254,77 @@ class ProgramExamAccessTests(TestCase):
         self.exam.target_programs.clear()
         self.exam.available_to_all_programs = True
         self.exam.save(update_fields=['available_to_all_programs'])
+        ExamAccessGrant.objects.create(student=self.crim_student, exam=self.exam)
         self.client.force_login(self.crim_student)
 
         dashboard = self.client.get(reverse('results:student_dashboard'))
 
         self.assertContains(dashboard, self.exam.title)
+
+    def test_correct_code_unlocks_only_an_eligible_student(self):
+        self.client.force_login(self.it_student)
+
+        response = self.client.post(
+            reverse('results:redeem_access_code'), {'access_code': 'abcde'}
+        )
+
+        self.assertRedirects(response, reverse('results:student_dashboard'))
+        self.assertTrue(
+            ExamAccessGrant.objects.filter(student=self.it_student, exam=self.exam).exists()
+        )
+        self.assertContains(
+            self.client.get(reverse('results:student_dashboard')), self.exam.title
+        )
+
+    def test_correct_code_cannot_bypass_program_assignment(self):
+        self.client.force_login(self.crim_student)
+
+        self.client.post(
+            reverse('results:redeem_access_code'), {'access_code': 'ABCDE'}
+        )
+
+        self.assertFalse(
+            ExamAccessGrant.objects.filter(student=self.crim_student, exam=self.exam).exists()
+        )
+
+    def test_rotating_code_revokes_previous_unlock_and_old_code(self):
+        ExamAccessGrant.objects.create(student=self.it_student, exam=self.exam)
+        old_code = self.exam.access_code
+        self.client.force_login(self.instructor)
+
+        self.client.post(
+            reverse('exams:exam_access_control', args=[self.exam.id]),
+            {'action': 'rotate'},
+        )
+
+        self.exam.refresh_from_db()
+        self.assertRegex(self.exam.access_code, r'^[A-Z0-9]{5}$')
+        self.assertNotEqual(self.exam.access_code, old_code)
+        self.assertFalse(ExamAccessGrant.objects.filter(exam=self.exam).exists())
+
+        self.client.force_login(self.it_student)
+        self.client.post(
+            reverse('results:redeem_access_code'), {'access_code': old_code}
+        )
+        self.assertFalse(
+            ExamAccessGrant.objects.filter(student=self.it_student, exam=self.exam).exists()
+        )
+
+    def test_disabling_access_revokes_unlock_and_blocks_published_exam(self):
+        ExamAccessGrant.objects.create(student=self.it_student, exam=self.exam)
+        self.client.force_login(self.instructor)
+        self.client.post(
+            reverse('exams:exam_access_control', args=[self.exam.id]),
+            {'action': 'disable'},
+        )
+
+        self.exam.refresh_from_db()
+        self.assertFalse(self.exam.access_code_enabled)
+        self.assertIsNone(self.exam.access_code)
+        self.assertFalse(ExamAccessGrant.objects.filter(exam=self.exam).exists())
+
+        self.client.force_login(self.it_student)
+        dashboard = self.client.get(reverse('results:student_dashboard'))
+        exam_page = self.client.get(reverse('results:take_exam', args=[self.exam.id]))
+        self.assertNotContains(dashboard, self.exam.title)
+        self.assertRedirects(exam_page, reverse('results:student_dashboard'))

@@ -3,7 +3,7 @@ setlocal
 REM One-time administrator setup for the LAN exam server:
 REM - binds MySQL to localhost only
 REM - removes inbound MySQL firewall rules
-REM - allows local-subnet access to Django/Waitress on TCP 8000
+REM - allows local-subnet access to Django/Waitress on standard HTTP port 80
 
 cd /d "%~dp0.."
 
@@ -23,5 +23,5 @@ if errorlevel 1 (
 )
 
 echo.
-echo MySQL is restricted to localhost and LAN web access is enabled on TCP 8000.
+echo MySQL is restricted to localhost and LAN web access is enabled on TCP 80.
 pause

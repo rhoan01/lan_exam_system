@@ -37,12 +37,20 @@
   <div class="stat-card"><div class="stat-label">Duration</div><span class="stat-value">{{ exam.time_limit_minutes }}<small style="font-size:.8rem; font-weight:650; letter-spacing:0;"> min</small></span></div>
 </div>
 
-{% if exam.is_published and exam.access_code %}
-  <div class="notice notice-warning" style="margin-bottom:20px;">
-    <strong>Irregular student access</strong><span class="access-code">{{ exam.access_code }}</span>
-    <span class="helptext">Share this code only with students outside the assigned program, year level, or section who need access.</span>
-  </div>
-{% endif %}
+<div class="notice {% if exam.access_code_enabled %}notice-warning{% else %}notice-danger{% endif %}" style="margin-bottom:20px;">
+  {% if exam.access_code_enabled and exam.access_code %}
+    <strong>Student access enabled</strong><span class="access-code">{{ exam.access_code }}</span>
+    <span class="helptext">Only eligible students who enter this current five-character code can open the exam.</span>
+    <div class="inline-actions" style="margin-top:12px;">
+      <form method="post" action="{% url 'exams:exam_access_control' exam.id %}" onsubmit="return confirm('Change the code? Every previous unlock will be revoked immediately.');">{% csrf_token %}<input type="hidden" name="action" value="rotate"><button type="submit" class="btn btn-sm btn-secondary">Generate new code</button></form>
+      <form method="post" action="{% url 'exams:exam_access_control' exam.id %}" onsubmit="return confirm('Disable student access? Nobody will be able to open this exam, even while it is published.');">{% csrf_token %}<input type="hidden" name="action" value="disable"><button type="submit" class="btn btn-sm btn-danger">Disable access</button></form>
+    </div>
+  {% else %}
+    <strong>Student access disabled</strong>
+    <span class="helptext">Students cannot open this exam even if it is published. Enable access to generate a new code.</span>
+    <form method="post" action="{% url 'exams:exam_access_control' exam.id %}" style="margin-top:12px;">{% csrf_token %}<input type="hidden" name="action" value="enable"><button type="submit" class="btn btn-sm btn-accent">Enable and generate code</button></form>
+  {% endif %}
+</div>
 
 <section class="card">
   <div class="card-header">

@@ -77,7 +77,7 @@ async def run(url, clients, timeout):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--url', default='http://127.0.0.1:8000/login/')
+    parser.add_argument('--url', default='http://127.0.0.1/login/')
     parser.add_argument('--clients', type=int, default=600)
     parser.add_argument('--timeout', type=float, default=60)
     args = parser.parse_args()

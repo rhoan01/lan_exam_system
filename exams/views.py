@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from accounts.decorators import instructor_required
 from accounts.models import SECTION_CHOICES
-from results.models import ExamAttempt
+from results.models import ExamAccessGrant, ExamAttempt
 from results.grading import (
     image_identification_results, parse_image_identification_answer,
     parse_matching_answer,
@@ -154,10 +154,45 @@ def exam_toggle_publish(request, exam_id):
         messages.error(request, "Add at least one question before publishing.")
     else:
         exam.is_published = not exam.is_published
-        if exam.is_published and not exam.access_code:
-            exam.access_code = exam.generate_access_code()
         exam.save()
         messages.success(request, f"Exam is now {'published' if exam.is_published else 'unpublished'}.")
+    return redirect('exams:exam_detail', exam_id=exam.id)
+
+
+@instructor_required
+def exam_access_control(request, exam_id):
+    if request.method != 'POST':
+        return redirect('exams:exam_detail', exam_id=exam_id)
+
+    action = request.POST.get('action')
+    with transaction.atomic():
+        exam = get_object_or_404(
+            Exam.objects.select_for_update(),
+            id=exam_id,
+            subject__instructor=request.user,
+        )
+        if action in {'enable', 'rotate'}:
+            exam.access_code = exam.generate_access_code()
+            exam.access_code_enabled = True
+            exam.save(update_fields=['access_code', 'access_code_enabled'])
+            ExamAccessGrant.objects.filter(exam=exam).delete()
+            verb = 'enabled' if action == 'enable' else 'changed'
+            messages.success(
+                request,
+                f"Student access {verb}. All students must enter the current code.",
+            )
+        elif action == 'disable':
+            exam.access_code_enabled = False
+            exam.access_code = None
+            exam.save(update_fields=['access_code', 'access_code_enabled'])
+            ExamAccessGrant.objects.filter(exam=exam).delete()
+            messages.success(
+                request,
+                "Student access disabled. This exam cannot be opened even while published.",
+            )
+        else:
+            messages.error(request, "Unknown exam access action.")
+
     return redirect('exams:exam_detail', exam_id=exam.id)
 
 

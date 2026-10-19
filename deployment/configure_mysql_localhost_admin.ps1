@@ -107,15 +107,17 @@ try {
         Get-NetFirewallRule -DisplayName $_ -ErrorAction SilentlyContinue |
             Remove-NetFirewallRule
     }
-    $webRuleName = 'LAN Exam System (TCP 8000)'
-    Get-NetFirewallRule -DisplayName $webRuleName -ErrorAction SilentlyContinue |
-        Remove-NetFirewallRule
+    @('LAN Exam System (TCP 8000)', 'LAN Exam System (TCP 80)') | ForEach-Object {
+        Get-NetFirewallRule -DisplayName $_ -ErrorAction SilentlyContinue |
+            Remove-NetFirewallRule
+    }
+    $webRuleName = 'LAN Exam System (TCP 80)'
     New-NetFirewallRule `
         -DisplayName $webRuleName `
         -Direction Inbound `
         -Action Allow `
         -Protocol TCP `
-        -LocalPort 8000 `
+        -LocalPort 80 `
         -RemoteAddress LocalSubnet `
         -Profile Private,Domain | Out-Null
 

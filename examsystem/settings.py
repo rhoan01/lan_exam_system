@@ -65,12 +65,19 @@ DEBUG = _env_bool('DJANGO_DEBUG', True)
 # actual examination deployment. Set DJANGO_ALLOWED_HOSTS to the server's
 # LAN IP / hostname instead, e.g. "192.168.1.10,examserver".
 ALLOWED_HOSTS = _env_list('DJANGO_ALLOWED_HOSTS', ['*'] if DEBUG else [])
+LAN_HOSTNAME = os.environ.get('LAN_HOSTNAME', 'exam.ite').strip().lower()
+if LAN_HOSTNAME and LAN_HOSTNAME not in ALLOWED_HOSTS and '*' not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(LAN_HOSTNAME)
 
 # Needed when serving over plain http:// from a LAN IP so Django accepts
 # POST requests (form submissions) with a valid CSRF token. Set this to
 # match how students actually reach the server, e.g.:
 # DJANGO_CSRF_TRUSTED_ORIGINS=http://192.168.1.10:8000
 CSRF_TRUSTED_ORIGINS = _env_list('DJANGO_CSRF_TRUSTED_ORIGINS', [])
+if LAN_HOSTNAME:
+    lan_origin = f'http://{LAN_HOSTNAME}'
+    if lan_origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(lan_origin)
 
 INSTALLED_APPS = [
     'django.contrib.admin',

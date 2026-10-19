@@ -33,7 +33,8 @@ if not defined DB_PASSWORD (
   goto :error
 )
 
-if not defined WAITRESS_PORT set "WAITRESS_PORT=8000"
+if not defined WAITRESS_PORT set "WAITRESS_PORT=80"
+if not defined LAN_HOSTNAME set "LAN_HOSTNAME=exam.ite"
 if not defined WAITRESS_THREADS set "WAITRESS_THREADS=32"
 REM Waitress uses select() on Windows, whose descriptor set is limited. Keep
 REM live channels below that ceiling; the larger OS backlog queues the rest.
@@ -81,6 +82,7 @@ echo ============================================================
 echo  LAN Examination System - PRODUCTION / MYSQL
 echo  Local: http://127.0.0.1:%WAITRESS_PORT%/
 echo  LAN:   http://%LAN_SERVER_IP%:%WAITRESS_PORT%/
+echo  Name:  http://%LAN_HOSTNAME%/
 echo  Threads: %WAITRESS_THREADS%   Connection limit: %WAITRESS_CONNECTION_LIMIT%
 echo  Press CTRL+C to stop the web server.
 echo ============================================================

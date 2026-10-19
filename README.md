@@ -47,6 +47,11 @@ starting/stopping the system on exam day, backing up exam data, and
 pre-exam testing recommendations. No Docker or container platform is
 used anywhere in this project.
 
+The production launcher uses standard HTTP port 80. After mapping the
+hostname on each lab computer with
+`deployment/configure_exam_hostname_client_admin.bat`, students can open
+`http://exam.ite/` without typing an IP address or port.
+
 ## Requirements
 
 - Python 3.10+

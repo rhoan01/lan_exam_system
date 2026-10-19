@@ -30,8 +30,8 @@
   {% endif %}
 </section>
 <section class="card">
-  <div class="card-header"><div><span class="eyebrow">Special access</span><h3>Have an access code?</h3><p>Use a code from your instructor to unlock an additional exam.</p></div></div>
-  <form method="post" action="{% url 'results:redeem_access_code' %}" class="inline-actions" style="max-width:520px;">{% csrf_token %}<input type="text" name="access_code" placeholder="Enter 8-character code" style="text-transform:uppercase;" maxlength="12" aria-label="Exam access code"><button type="submit" class="btn btn-secondary" style="white-space:nowrap;">Unlock exam</button></form>
+  <div class="card-header"><div><span class="eyebrow">Secure exam entry</span><h3>Enter your exam code</h3><p>The current five-character code unlocks an exam only when it is assigned to your program, year level, and section.</p></div></div>
+  <form method="post" action="{% url 'results:redeem_access_code' %}" class="inline-actions" style="max-width:520px;">{% csrf_token %}<input type="text" name="access_code" placeholder="Enter 5-character code" style="text-transform:uppercase;" minlength="5" maxlength="5" pattern="[A-Za-z0-9]{5}" autocomplete="off" aria-label="Exam access code" required><button type="submit" class="btn btn-secondary" style="white-space:nowrap;">Unlock exam</button></form>
 </section>
 <section class="card">
   <div class="card-header"><div><span class="eyebrow">Performance</span><h2>My results</h2><p>Your submitted exams and final scores.</p></div></div>
