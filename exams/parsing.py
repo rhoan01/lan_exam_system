@@ -73,6 +73,11 @@ Rules for Format 2:
 
 Windows/Notepad line endings (\\r\\n) are handled automatically.
 
+An MCQ-only file may omit repeated TYPE/POINTS lines. In that variant, each
+question starts with ``Q:`` and the correct choice ends with ``*``. Content
+between the question and choices is preserved as an indented code block and
+the item uses the Programming Multiple Choice display.
+
 --------------------------------------------------------------------
 FORMAT 3 - Programming Multiple Choice
 --------------------------------------------------------------------
@@ -102,6 +107,9 @@ DISTRACTOR_RE = re.compile(r'^DISTRACTOR\s*:\s*(.+)$', re.IGNORECASE)
 PROGRAMMING_START_RE = re.compile(r'^(\d+)[.)](?:\s+(.*))?$')
 PROGRAMMING_CHOICE_RE = re.compile(r'^([A-Za-z])[.)]\s+(.+)$')
 TRAILING_CORRECT_RE = re.compile(r'\s*\*\s*$')
+Q_LINE_RE = re.compile(r'^\s*Q:\s*(.*)$', re.IGNORECASE)
+TYPE_LINE_RE = re.compile(r'^\s*TYPE:\s*(\S+)\s*$', re.IGNORECASE)
+POINTS_LINE_RE = re.compile(r'^\s*POINTS:\s*(\S+)\s*$', re.IGNORECASE)
 
 
 class BulkImportError(Exception):
@@ -307,6 +315,139 @@ def _parse_simple_mcq_block(lines, idx):
     }
 
 
+def _looks_like_q_marked_mcq(raw_text):
+    """Detect Q:/star-marked MCQ files whose code may contain blank lines.
+
+    Restrict this path to files that contain only explicit MCQ type markers.
+    Other structured question types must continue through the established
+    structured parser because their answer-key rules are different.
+    """
+    lines = _normalize_lines(raw_text)
+    if not any(Q_LINE_RE.match(line) for line in lines):
+        return False
+
+    explicit_types = [
+        match.group(1).upper()
+        for line in lines
+        if (match := TYPE_LINE_RE.match(line))
+    ]
+    if any(question_type != 'MCQ' for question_type in explicit_types):
+        return False
+
+    return any(
+        CHOICE_RE.match(line.strip()) and TRAILING_CORRECT_RE.search(line)
+        for line in lines
+    )
+
+
+def _parse_q_marked_mcq_question(lines, idx):
+    """Parse a Q:-delimited item, preserving optional code separately."""
+    question_match = Q_LINE_RE.match(lines[0]) if lines else None
+    if not question_match:
+        raise BulkImportError(f"Question {idx}: missing a 'Q:' line.", idx)
+
+    points = 1
+    for line in lines[1:]:
+        match = POINTS_LINE_RE.match(line)
+        if match:
+            value = match.group(1)
+            if not value.isdigit() or int(value) < 1:
+                raise BulkImportError(
+                    f"Question {idx}: POINTS must be a whole number of at least 1.", idx
+                )
+            points = int(value)
+            break
+
+    # Select the final contiguous run of lettered choices. This avoids
+    # mistaking a code line that happens to start with "A)" for an answer.
+    choice_indexes = [
+        line_index
+        for line_index, line in enumerate(lines[1:], start=1)
+        if CHOICE_RE.match(line.strip())
+    ]
+    if not choice_indexes:
+        raise BulkImportError(
+            f"Question {idx}: needs at least 2 choices (lines like 'A) ...', 'B) ...').",
+            idx,
+        )
+
+    choice_end = choice_indexes[-1]
+    choice_start = choice_end
+    while choice_start > 1 and CHOICE_RE.match(lines[choice_start - 1].strip()):
+        choice_start -= 1
+    choice_lines = lines[choice_start:choice_end + 1]
+    if len(choice_lines) < 2:
+        raise BulkImportError(
+            f"Question {idx}: needs at least 2 consecutive choices.", idx
+        )
+
+    choices = []
+    marked_count = 0
+    for line in choice_lines:
+        match = CHOICE_RE.match(line.strip())
+        choice_text = match.group(2).strip()
+        is_correct = bool(TRAILING_CORRECT_RE.search(choice_text))
+        if is_correct:
+            marked_count += 1
+            choice_text = TRAILING_CORRECT_RE.sub('', choice_text).strip()
+        if not choice_text:
+            raise BulkImportError(f"Question {idx}: contains an empty choice.", idx)
+        choices.append((choice_text, is_correct))
+
+    if marked_count != 1:
+        raise BulkImportError(
+            f"Question {idx}: exactly one choice must end with '*'; found {marked_count}.", idx
+        )
+
+    content_lines = []
+    for line in lines[1:choice_start]:
+        if POINTS_LINE_RE.match(line) or TYPE_LINE_RE.match(line):
+            continue
+        content_lines.append(line.rstrip())
+    while content_lines and not content_lines[0].strip():
+        content_lines.pop(0)
+    while content_lines and not content_lines[-1].strip():
+        content_lines.pop()
+
+    question_text = question_match.group(1).strip()
+    if not question_text:
+        raise BulkImportError(f"Question {idx}: missing question text.", idx)
+
+    # Leading spaces are intentionally untouched: Python and other
+    # indentation-sensitive languages depend on them for valid syntax.
+    code_snippet = '\n'.join(content_lines)
+    question_type = 'PMCQ' if code_snippet else 'MCQ'
+
+    return {
+        'question_type': question_type,
+        'question_text': question_text,
+        'code_snippet': code_snippet,
+        'code_language': '',
+        'points': points,
+        'expected_answer_count': 1,
+        'choices': choices,
+        'keys': [],
+        'pairs': [],
+        'distractors': [],
+    }
+
+
+def _parse_q_marked_mcqs(raw_text, max_new_items):
+    lines = _normalize_lines(raw_text)
+    starts = [index for index, line in enumerate(lines) if Q_LINE_RE.match(line)]
+    if len(starts) > max_new_items:
+        raise BulkImportError(
+            f"This text contains {len(starts)} question(s), but this exam only has room "
+            f"for {max_new_items} more before reaching the 100-item limit."
+        )
+
+    parsed = []
+    for question_index, start in enumerate(starts, start=1):
+        end = starts[question_index] if question_index < len(starts) else len(lines)
+        parsed.append(_parse_q_marked_mcq_question(lines[start:end], question_index))
+    return parsed
+
+
 def _normalize_lines(raw_text):
     normalized = raw_text.replace('\r\n', '\n').replace('\r', '\n')
     if normalized.startswith('\ufeff'):
@@ -448,6 +589,9 @@ def _parse_programming_questions(raw_text, max_new_items):
 
 
 def parse_bulk_questions(raw_text, max_new_items):
+    if _looks_like_q_marked_mcq(raw_text):
+        return _parse_q_marked_mcqs(raw_text, max_new_items)
+
     if _looks_like_programming_mcq(raw_text):
         return _parse_programming_questions(raw_text, max_new_items)
 

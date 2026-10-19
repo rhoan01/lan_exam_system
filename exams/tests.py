@@ -129,6 +129,51 @@ Answer Key: B
         self.assertEqual(parsed[0]['choices'], [('3', False), ('4', True)])
 
 
+class QMarkedMultipleChoiceParserTests(SimpleTestCase):
+    def test_embedded_code_uses_boxed_programming_mcq_and_preserves_indentation(self):
+        text = """TYPE: MCQ
+Q: What does the loop print?
+POINTS: 2
+
+for number in range(1, 3):
+    print(number)
+
+A) 1
+B) 1 2 *
+C) 2
+D) Nothing
+
+Q: Which keyword exits a loop?
+
+A) pass
+B) continue
+C) break *
+D) return
+"""
+        parsed = parse_bulk_questions(text, max_new_items=10)
+
+        self.assertEqual(len(parsed), 2)
+        self.assertEqual([item['question_type'] for item in parsed], ['PMCQ', 'MCQ'])
+        self.assertEqual(parsed[0]['points'], 2)
+        self.assertEqual(parsed[0]['question_text'], 'What does the loop print?')
+        self.assertEqual(
+            parsed[0]['code_snippet'],
+            'for number in range(1, 3):\n    print(number)',
+        )
+        self.assertEqual(parsed[0]['choices'][1], ('1 2', True))
+        self.assertEqual(parsed[1]['points'], 1)
+        self.assertEqual(parsed[1]['code_snippet'], '')
+        self.assertEqual(parsed[1]['choices'][2], ('break', True))
+
+    def test_q_marked_mcq_requires_exactly_one_starred_choice(self):
+        text = """Q: Select an answer.
+A) First *
+B) Second *
+"""
+        with self.assertRaisesRegex(BulkImportError, r"Question 1: exactly one choice"):
+            parse_bulk_questions(text, max_new_items=10)
+
+
 def uploaded_png(name='diagram.png', color='white'):
     output = io.BytesIO()
     Image.new('RGB', (8, 8), color=color).save(output, format='PNG')

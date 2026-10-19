@@ -8,7 +8,7 @@
 
   <div class="card-header"><div><span class="eyebrow">Reference</span><h2>Formatting guide</h2><p>Three import formats are supported.</p></div></div>
 
-  <p class="helptext"><strong>Format 1 (all question types):</strong> each question starts with a <code>TYPE:</code> line — <code>MCQ</code>, <code>TF</code>, <code>ENUM</code>, <code>IDENT</code>, <code>CASE</code>, or <code>MATCH</code>.</p>
+  <p class="helptext"><strong>Format 1 (all question types):</strong> each question starts with a <code>TYPE:</code> line — <code>MCQ</code>, <code>TF</code>, <code>ENUM</code>, <code>IDENT</code>, <code>CASE</code>, or <code>MATCH</code>. For an MCQ-only file, repeated <code>TYPE: MCQ</code> and <code>POINTS: 1</code> lines may be omitted as long as every question starts with <code>Q:</code>.</p>
   <pre>
 TYPE: MCQ
 Q: What is the capital of France?
@@ -47,7 +47,7 @@ DISTRACTOR: Network as a Service
   </pre>
   <ul class="helptext" style="margin-top:-6px;">
     <li><strong>POINTS:</strong> optional, defaults to 1.</li>
-    <li><strong>Multiple Choice:</strong> mark the correct choice by ending its line with <code>*</code>.</li>
+    <li><strong>Multiple Choice:</strong> mark the correct choice by ending its line with <code>*</code>. Questions written with <code>Q:</code>, an indented code block, and lettered choices use the boxed Programming Multiple Choice display while retaining normal multiple-choice grading.</li>
     <li><strong>True/False:</strong> just add an <code>ANSWER: True</code> or <code>ANSWER: False</code> line.</li>
     <li><strong>Enumeration / Identification / Case Analysis:</strong> list accepted answers or keywords with <code>KEY:</code>, one per line.</li>
     <li><strong>Matching Type:</strong> list each Column A/B pair with <code>PAIR: left = right</code> (needs at least 2), plus optional <code>DISTRACTOR: text</code> lines for extra Column B options with no correct match. Column B is shown to students in random order.</li>
