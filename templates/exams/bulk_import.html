@@ -4,9 +4,8 @@
 <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="{% url 'exams:exam_detail' exam.id %}">{{ exam.title }}</a><span aria-hidden="true">/</span><span>Bulk import</span></nav>
 <div class="page-header"><div class="page-header-copy"><span class="eyebrow">Question tools</span><h1>Bulk import questions</h1><p class="page-subtitle">Paste prepared questions or upload a plain-text file. {{ remaining_slots }} more item{{ remaining_slots|pluralize }} can be added to {{ exam.title }}.</p></div></div>
 <div class="grid import-layout">
-<div class="card">
-
-  <div class="card-header"><div><span class="eyebrow">Reference</span><h2>Formatting guide</h2><p>Use the Q: plain-text format below for Multiple Choice and Programming Multiple Choice. Older formats are also supported.</p></div></div>
+<details class="card import-guide">
+  <summary><strong>Formatting guide</strong><span class="helptext">Expand for .txt examples and accepted formats.</span></summary>
 
   <p class="helptext"><strong>Recommended .txt format (Multiple Choice and Programming Multiple Choice):</strong> start every question with <code>Q:</code>. Use <code>A)</code>, <code>B)</code>, etc. for consecutive choices and end exactly one correct choice with <code>*</code>.</p>
   <pre>
@@ -117,7 +116,7 @@ D. Hello World! 15 *
 
   <p class="helptext">Leave a blank line between questions. For the legacy numbered programming format, keep those questions in a separate import. Image Identification is created in the question editor because its image cannot be included in a text import.</p>
 
-</div>
+</details>
 <div class="card">
   <div class="card-header"><div><span class="eyebrow">Import source</span><h2>Add your questions</h2><p>Paste text or choose one .txt file.</p></div></div>
   <form method="post" enctype="multipart/form-data" novalidate id="bulk-import-form">

@@ -1,0 +1,25 @@
+<div class="sidebar-heading"><span class="eyebrow">Instructor</span><strong>Workspace</strong></div>
+<nav class="sidebar-nav" aria-label="Workspace sections">
+  <a href="{% url 'exams:instructor_dashboard' %}" {% if request.resolver_match.url_name == 'instructor_dashboard' %}aria-current="page"{% endif %}><span aria-hidden="true">&#9638;</span>My subjects</a>
+  <a href="{% url 'exams:subject_create' %}" {% if request.resolver_match.url_name == 'subject_create' %}aria-current="page"{% endif %}><span aria-hidden="true">+</span>New subject</a>
+  {% with current_exam=exam %}
+  {% if current_exam %}
+    <div class="sidebar-context"><small>{{ current_exam.subject.code }}</small><strong>{{ current_exam.title }}</strong></div>
+    <a href="{% url 'exams:subject_detail' current_exam.subject_id %}"><span aria-hidden="true">&#8592;</span>Subject exams</a>
+    <a href="{% url 'exams:exam_detail' current_exam.id %}" {% if request.resolver_match.url_name == 'exam_detail' and exam_panel == 'overview' %}aria-current="page"{% endif %}>Overview</a>
+    <a href="{% url 'exams:exam_detail' current_exam.id %}?panel=questions" {% if exam_panel == 'questions' %}aria-current="page"{% endif %}>Questions</a>
+    <a href="{% url 'exams:question_create' current_exam.id %}" {% if request.resolver_match.url_name == 'question_create' %}aria-current="page"{% endif %}>Add question</a>
+    <a href="{% url 'exams:bulk_import_questions' current_exam.id %}" {% if request.resolver_match.url_name == 'bulk_import_questions' %}aria-current="page"{% endif %}>Bulk import</a>
+    <a href="{% url 'exams:exam_edit' current_exam.id %}" {% if request.resolver_match.url_name == 'exam_edit' %}aria-current="page"{% endif %}>Exam settings</a>
+    <a href="{% url 'exams:exam_detail' current_exam.id %}?panel=access" {% if exam_panel == 'access' %}aria-current="page"{% endif %}>Student access</a>
+    <div class="sidebar-label">Results</div>
+    <a href="{% url 'exams:exam_results' current_exam.id %}" {% if request.resolver_match.url_name == 'exam_results' and result_status == 'submitted' %}aria-current="page"{% endif %}>Submitted</a>
+    <a href="{% url 'exams:exam_results' current_exam.id %}?status=in_progress" {% if request.resolver_match.url_name == 'exam_results' and result_status == 'in_progress' %}aria-current="page"{% endif %}>In progress</a>
+  {% elif subject %}
+    <div class="sidebar-context"><small>Subject</small><strong>{{ subject.code }}</strong></div>
+    <a href="{% url 'exams:subject_detail' subject.id %}" {% if request.resolver_match.url_name == 'subject_detail' %}aria-current="page"{% endif %}>Exams</a>
+    <a href="{% url 'exams:exam_create' subject.id %}" {% if request.resolver_match.url_name == 'exam_create' %}aria-current="page"{% endif %}>New exam</a>
+  {% endif %}
+  {% endwith %}
+</nav>
+<div class="sidebar-note"><span class="system-status"><i aria-hidden="true"></i> Instructor workspace</span><p>Choose a section to focus on one task.</p></div>

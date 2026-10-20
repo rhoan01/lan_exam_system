@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="{% static 'css/style.css' %}">
   {% block extra_head %}{% endblock %}
 </head>
-<body class="{% block body_class %}{% endblock %}">
+<body class="{% if user.is_authenticated and user.is_instructor and request.resolver_match.namespace == 'exams' %}instructor-app {% endif %}{% block body_class %}{% endblock %}">
   <a class="skip-link" href="#main-content">Skip to main content</a>
 
   <header class="app-header">
@@ -63,6 +63,12 @@
     </div>
   </header>
 
+  <div class="workspace-shell">
+  {% if user.is_authenticated and user.is_instructor and request.resolver_match.namespace == 'exams' %}
+    <aside class="workspace-sidebar" id="workspace-sidebar" aria-label="Instructor workspace">
+      {% include 'exams/_sidebar.html' %}
+    </aside>
+  {% endif %}
   <main class="page-shell" id="main-content" tabindex="-1">
     {% if messages %}
       <div class="messages" role="status" aria-live="polite">
@@ -79,6 +85,7 @@
 
     {% block content %}{% endblock %}
   </main>
+  </div>
 
   <footer class="app-footer">
     <div class="footer-shell">
@@ -100,5 +107,8 @@
     })();
   </script>
   {% block extra_scripts %}{% endblock %}
+  {% if user.is_authenticated and user.is_instructor and request.resolver_match.namespace == 'exams' %}
+    <script src="{% static 'js/workspace.js' %}" defer></script>
+  {% endif %}
 </body>
 </html>

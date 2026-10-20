@@ -4,9 +4,14 @@
 <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="{% url 'exams:instructor_dashboard' %}">Dashboard</a><span aria-hidden="true">/</span><a href="{% url 'exams:exam_detail' exam.id %}">{{ exam.title }}</a><span aria-hidden="true">/</span><span>Results</span></nav>
 
 <div class="page-header">
-  <div class="page-header-copy"><span class="eyebrow">Performance center</span><h1>Exam results</h1><p class="page-subtitle">{{ exam.subject.code }} · {{ exam.title }} · {{ exam.total_points }} total points</p></div>
+  <div class="page-header-copy"><span class="eyebrow">Performance center</span><h1>{% if result_status == 'submitted' %}Submitted results{% else %}In-progress attempts{% endif %}</h1><p class="page-subtitle">{{ exam.subject.code }} · {{ exam.title }} · {{ exam.total_points }} total points</p></div>
   {% if grouped_attempts %}<div class="page-actions"><a class="btn btn-secondary" href="{% url 'exams:export_exam_results_csv' exam.id %}{% if filter_query %}?{{ filter_query }}{% endif %}">Download CSV</a><a class="btn btn-accent" href="{% url 'exams:export_exam_results_pdf' exam.id %}{% if filter_query %}?{{ filter_query }}{% endif %}">Download PDF</a></div>{% endif %}
 </div>
+
+<nav class="workspace-tabs" aria-label="Attempt status">
+  <a href="{% url 'exams:exam_results' exam.id %}{% if filter_query %}?{{ filter_query }}{% endif %}" {% if result_status == 'submitted' %}aria-current="page"{% endif %}>Submitted <span>{{ submitted_count }}</span></a>
+  <a href="{% url 'exams:exam_results' exam.id %}?status=in_progress{% if filter_query %}&amp;{{ filter_query }}{% endif %}" {% if result_status == 'in_progress' %}aria-current="page"{% endif %}>In progress <span>{{ in_progress_count }}</span></a>
+</nav>
 
 <section class="card results-filter-card">
   <div class="results-filter-header">
@@ -18,6 +23,7 @@
     {% if has_active_filters %}<span class="filter-status">Filtered view</span>{% endif %}
   </div>
   <form method="get" class="results-filter-form">
+    <input type="hidden" name="status" value="{{ result_status }}">
     <div>
       <label for="id_first_name">First name</label>
       <input type="search" id="id_first_name" name="first_name" value="{{ first_name }}" placeholder="Any first name" autocomplete="off">
@@ -42,7 +48,7 @@
     </div>
     <div class="results-filter-actions">
       <button type="submit" class="btn btn-accent">Apply view</button>
-      {% if has_active_filters %}<a class="btn btn-secondary" href="{% url 'exams:exam_results' exam.id %}">Reset</a>{% endif %}
+      {% if has_active_filters %}<a class="btn btn-secondary" href="{% url 'exams:exam_results' exam.id %}?status={{ result_status }}">Reset</a>{% endif %}
     </div>
   </form>
   {% if has_active_filters %}
@@ -57,69 +63,14 @@
 </section>
 
 <div class="stats-grid">
-  <div class="stat-card"><div class="stat-label">{% if has_active_filters %}Submitted shown{% else %}Submitted{% endif %}</div><span class="stat-value">{{ attempts|length }}</span></div>
-  <div class="stat-card"><div class="stat-label">{% if has_active_filters %}In progress shown{% else %}In progress{% endif %}</div><span class="stat-value">{{ in_progress_attempts|length }}</span></div>
+  <div class="stat-card"><div class="stat-label">{% if has_active_filters %}Submitted shown{% else %}Submitted{% endif %}</div><span class="stat-value">{{ submitted_count }}</span></div>
+  <div class="stat-card"><div class="stat-label">{% if has_active_filters %}In progress shown{% else %}In progress{% endif %}</div><span class="stat-value">{{ in_progress_count }}</span></div>
   <div class="stat-card"><div class="stat-label">Total points</div><span class="stat-value">{{ exam.total_points }}</span></div>
 </div>
 
-<section class="card">
-  <div class="card-header"><div><span class="eyebrow">Completed attempts</span><h2>Submitted results</h2><p>Review scores, answer details, and recorded tab switches by section.</p></div></div>
-  {% if grouped_attempts %}
-    {% for section, attempts in grouped_attempts %}
-      <div class="section-label">Section {{ section }} · {{ attempts|length }} student{{ attempts|length|pluralize }}</div>
-      <div class="table-wrap" style="margin-bottom:20px;">
-        <table>
-          <thead><tr><th>Student <span class="sort-hint">{% if name_order == 'desc' %}Z–A{% else %}A–Z{% endif %}</span></th><th>ID number</th><th>Program / year</th><th>Score</th><th>Result</th><th>Tab switches</th><th>Submitted</th><th>Actions</th></tr></thead>
-          <tbody>
-          {% for attempt in attempts %}
-            <tr>
-              <td><strong>{{ attempt.student.get_full_name }}</strong></td>
-              <td>{{ attempt.student.student_profile.id_number }}</td>
-              <td>{{ attempt.student.student_profile.program }} / {{ attempt.student.student_profile.year_level }}</td>
-              <td>{{ attempt.score|floatformat:0 }} / {{ attempt.total_points|floatformat:0 }}</td>
-              <td><span class="badge {% if attempt.percentage >= 75 %}badge-published{% else %}badge-warning{% endif %}">{{ attempt.percentage }}%</span></td>
-              <td>{% if attempt.tab_switch_count %}<span class="badge badge-draft">{{ attempt.tab_switch_count }}</span>{% else %}<span class="muted">0</span>{% endif %}</td>
-              <td style="white-space:nowrap;">{{ attempt.submitted_at|date:"M d, Y H:i" }}</td>
-              <td>
-                <div class="inline-actions" style="min-width:250px;">
-                  <a href="{% url 'exams:view_student_attempt' attempt.id %}" class="btn btn-sm btn-secondary">View answers</a>
-                  <form method="post" action="{% url 'exams:reopen_attempt' attempt.id %}" onsubmit="return confirm('Reopen this attempt? The score will be cleared until the student resubmits.');" class="inline-actions" style="flex-wrap:nowrap;">{% csrf_token %}<input type="number" name="extra_minutes" min="0" placeholder="+ min" style="width:68px; min-height:33px;" title="Optional extra minutes"><button type="submit" class="btn btn-sm btn-warn">Reopen</button></form>
-                </div>
-              </td>
-            </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    {% endfor %}
-  {% else %}
-    <div class="empty-state"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M4 19V9M10 19V5M16 19v-7M3 19h18"/></svg></div><h3>{% if has_active_filters %}No matching submissions{% else %}No submissions yet{% endif %}</h3><p>{% if has_active_filters %}Adjust or reset the view controls to see other students.{% else %}Completed attempts will appear here as students submit the exam.{% endif %}</p></div>
-  {% endif %}
-</section>
-
-<section class="card">
-  <div class="card-header"><div><span class="eyebrow">Live activity</span><h2>In-progress attempts</h2><p>Support students interrupted by power or network issues with additional time.</p></div></div>
-  {% if grouped_in_progress %}
-    {% for section, attempts in grouped_in_progress %}
-      <div class="section-label">Section {{ section }} · {{ attempts|length }} student{{ attempts|length|pluralize }}</div>
-      <div class="table-wrap" style="margin-bottom:20px;">
-        <table>
-          <thead><tr><th>Student <span class="sort-hint">{% if name_order == 'desc' %}Z–A{% else %}A–Z{% endif %}</span></th><th>ID number</th><th>Started</th><th>Extra time</th><th>Tab switches</th><th>Actions</th></tr></thead>
-          <tbody>
-          {% for attempt in attempts %}
-            <tr>
-              <td><strong>{{ attempt.student.get_full_name }}</strong></td><td>{{ attempt.student.student_profile.id_number }}</td><td style="white-space:nowrap;">{{ attempt.started_at|date:"M d, Y H:i" }}</td>
-              <td>{% if attempt.extra_time_seconds %}{{ attempt.extra_time_minutes }} min{% else %}—{% endif %}</td>
-              <td>{% if attempt.tab_switch_count %}<span class="badge badge-draft">{{ attempt.tab_switch_count }}</span>{% else %}<span class="muted">0</span>{% endif %}</td>
-              <td><div class="inline-actions" style="min-width:245px;"><a href="{% url 'exams:view_student_attempt' attempt.id %}" class="btn btn-sm btn-secondary">View saved answers</a><form method="post" action="{% url 'exams:grant_extra_time' attempt.id %}" class="inline-actions" style="flex-wrap:nowrap;">{% csrf_token %}<input type="number" name="extra_minutes" min="1" placeholder="Minutes" style="width:88px; min-height:33px;" required><button type="submit" class="btn btn-sm btn-accent">Add time</button></form><form method="post" action="{% url 'exams:delete_in_progress_attempt' attempt.id %}" onsubmit="return confirm('Permanently delete {{ attempt.student.get_full_name }}\'s in-progress attempt and saved answers?');">{% csrf_token %}<button type="submit" class="btn btn-sm btn-danger">Delete</button></form></div></td>
-            </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    {% endfor %}
-  {% else %}
-    <div class="empty-state" style="padding-block:28px;"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><h3>{% if has_active_filters %}No matching active attempts{% else %}No active attempts{% endif %}</h3><p>{% if has_active_filters %}No in-progress student matches the current view controls.{% else %}There are no students currently taking this exam.{% endif %}</p></div>
-  {% endif %}
-</section>
+{% if result_status == 'submitted' %}
+  {% include 'exams/_submitted_results.html' %}
+{% else %}
+  {% include 'exams/_in_progress_results.html' %}
+{% endif %}
 {% endblock %}

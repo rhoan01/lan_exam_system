@@ -1,0 +1,25 @@
+<section class="card">
+  <div class="card-header"><div><span class="eyebrow">Live activity</span><h2>In-progress attempts</h2><p>Support students interrupted by power or network issues with additional time.</p></div></div>
+  {% if grouped_in_progress %}
+    {% for section, attempts in grouped_in_progress %}
+      <div class="section-label">Section {{ section }} · {{ attempts|length }} student{{ attempts|length|pluralize }}</div>
+      <div class="table-wrap" style="margin-bottom:20px;">
+        <table>
+          <thead><tr><th>Student <span class="sort-hint">{% if name_order == 'desc' %}Z–A{% else %}A–Z{% endif %}</span></th><th>ID number</th><th>Started</th><th>Extra time</th><th>Tab switches</th><th>Actions</th></tr></thead>
+          <tbody>
+          {% for attempt in attempts %}
+            <tr>
+              <td><strong>{{ attempt.student.get_full_name }}</strong></td><td>{{ attempt.student.student_profile.id_number }}</td><td style="white-space:nowrap;">{{ attempt.started_at|date:"M d, Y H:i" }}</td>
+              <td>{% if attempt.extra_time_seconds %}{{ attempt.extra_time_minutes }} min{% else %}—{% endif %}</td>
+              <td>{% if attempt.tab_switch_count %}<span class="badge badge-draft">{{ attempt.tab_switch_count }}</span>{% else %}<span class="muted">0</span>{% endif %}</td>
+              <td><div class="inline-actions" style="min-width:245px;"><a href="{% url 'exams:view_student_attempt' attempt.id %}" class="btn btn-sm btn-secondary">View saved answers</a><form method="post" action="{% url 'exams:grant_extra_time' attempt.id %}" class="inline-actions" style="flex-wrap:nowrap;">{% csrf_token %}<input type="number" name="extra_minutes" min="1" placeholder="Minutes" style="width:88px; min-height:33px;" required><button type="submit" class="btn btn-sm btn-accent">Add time</button></form><form method="post" action="{% url 'exams:delete_in_progress_attempt' attempt.id %}" onsubmit="return confirm('Permanently delete {{ attempt.student.get_full_name }}\'s in-progress attempt and saved answers?');">{% csrf_token %}<button type="submit" class="btn btn-sm btn-danger">Delete</button></form></div></td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty-state" style="padding-block:28px;"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><h3>{% if has_active_filters %}No matching active attempts{% else %}No active attempts{% endif %}</h3><p>{% if has_active_filters %}No in-progress student matches the current view controls.{% else %}There are no students currently taking this exam.{% endif %}</p></div>
+  {% endif %}
+</section>

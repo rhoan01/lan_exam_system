@@ -137,10 +137,14 @@ def exam_edit(request, exam_id):
 @instructor_required
 def exam_detail(request, exam_id):
     exam = get_object_or_404(Exam, id=exam_id, subject__instructor=request.user)
-    questions = exam.questions.prefetch_related('choices', 'image_identification_items')
+    panel = request.GET.get('panel', 'overview')
+    if panel not in {'overview', 'questions', 'access'}:
+        panel = 'overview'
+    questions = exam.questions.all() if panel == 'questions' else []
     return render(request, 'exams/exam_detail.html', {
         'exam': exam,
         'questions': questions,
+        'exam_panel': panel,
         'max_items': MAX_ITEMS_PER_EXAM,
     })
 
@@ -193,7 +197,7 @@ def exam_access_control(request, exam_id):
         else:
             messages.error(request, "Unknown exam access action.")
 
-    return redirect('exams:exam_detail', exam_id=exam.id)
+    return redirect(reverse('exams:exam_detail', args=[exam.id]) + '?panel=access')
 
 
 @instructor_required
@@ -216,7 +220,7 @@ def question_create(request, exam_id):
 
     if not exam.has_room_for_more_questions():
         messages.error(request, f"This exam already has the maximum of {MAX_ITEMS_PER_EXAM} items.")
-        return redirect('exams:exam_detail', exam_id=exam.id)
+        return redirect(reverse('exams:exam_detail', args=[exam.id]) + '?panel=questions')
 
     if request.method == 'POST':
         form = QuestionForm(request.POST, request.FILES)
@@ -335,7 +339,7 @@ def question_create(request, exam_id):
                     key.question = question
                     key.save()
                     messages.success(request, "Question added with answer key.")
-                return redirect('exams:exam_detail', exam_id=exam.id)
+                return redirect(reverse('exams:exam_detail', args=[exam.id]) + '?panel=questions')
     else:
         form = QuestionForm(initial={'question_type': Question.MCQ, 'points': 1, 'expected_answer_count': 1})
         choice_formset = ChoiceFormSet()
@@ -511,7 +515,7 @@ def question_edit(request, question_id):
                     key.save()
                     messages.success(request, "Question updated.")
 
-                return redirect('exams:exam_detail', exam_id=exam.id)
+                return redirect(reverse('exams:exam_detail', args=[exam.id]) + '?panel=questions')
     else:
         form = QuestionEditForm(instance=question, image_locked=image_locked)
         choice_formset = (
@@ -573,7 +577,7 @@ def bulk_import_questions(request, exam_id):
 
             if effective_slots <= 0:
                 messages.error(request, f"This exam already has the maximum of {MAX_ITEMS_PER_EXAM} items.")
-                return redirect('exams:exam_detail', exam_id=exam.id)
+                return redirect(reverse('exams:exam_detail', args=[exam.id]) + '?panel=questions')
 
             try:
                 parsed = parse_bulk_questions(raw_text, effective_slots)
@@ -625,7 +629,7 @@ def bulk_import_questions(request, exam_id):
                     )
                 else:
                     messages.success(request, f"Imported {len(parsed)} question(s) successfully.")
-                return redirect('exams:exam_detail', exam_id=exam.id)
+                return redirect(reverse('exams:exam_detail', args=[exam.id]) + '?panel=questions')
     else:
         form = BulkImportForm()
 
@@ -645,7 +649,7 @@ def question_delete(request, question_id):
             q.order = i
             q.save(update_fields=['order'])
     messages.success(request, "Question removed.")
-    return redirect('exams:exam_detail', exam_id=exam_id)
+    return redirect(reverse('exams:exam_detail', args=[exam_id]) + '?panel=questions')
 
 
 def _group_attempts_by_section(attempts):
@@ -701,24 +705,29 @@ def _student_name_ordering(result_filters, include_section=False):
 def exam_results(request, exam_id):
     exam = get_object_or_404(Exam, id=exam_id, subject__instructor=request.user)
     result_filters = _result_filters(request)
-    attempts_queryset = ExamAttempt.objects.filter(exam=exam, is_submitted=True).select_related(
+    result_status = request.GET.get('status', 'submitted')
+    if result_status not in {'submitted', 'in_progress'}:
+        result_status = 'submitted'
+    base_queryset = _filter_attempts(ExamAttempt.objects.filter(exam=exam), result_filters)
+    submitted_count = base_queryset.filter(is_submitted=True).count()
+    in_progress_count = base_queryset.filter(is_submitted=False).count()
+    attempts_queryset = base_queryset.filter(is_submitted=True).select_related(
         'student', 'student__student_profile', 'student__student_profile__program'
     )
-    in_progress_queryset = ExamAttempt.objects.filter(exam=exam, is_submitted=False).select_related(
+    in_progress_queryset = base_queryset.filter(is_submitted=False).select_related(
         'student', 'student__student_profile', 'student__student_profile__program'
     )
-    attempts = list(_filter_attempts(
-        attempts_queryset, result_filters
-    ).order_by(*_student_name_ordering(result_filters)))
-    in_progress_attempts = list(_filter_attempts(
-        in_progress_queryset, result_filters
-    ).order_by(*_student_name_ordering(result_filters)))
+    attempts = list(attempts_queryset.order_by(*_student_name_ordering(result_filters))) if result_status == 'submitted' else []
+    in_progress_attempts = list(in_progress_queryset.order_by(*_student_name_ordering(result_filters))) if result_status == 'in_progress' else []
     active_filter_query = {
         key: value for key, value in result_filters.items()
         if value and not (key == 'name_order' and value == 'asc')
     }
     return render(request, 'exams/exam_results.html', {
         'exam': exam,
+        'result_status': result_status,
+        'submitted_count': submitted_count,
+        'in_progress_count': in_progress_count,
         'attempts': attempts,
         'in_progress_attempts': in_progress_attempts,
         'grouped_attempts': _group_attempts_by_section(attempts),
@@ -784,7 +793,9 @@ def view_student_attempt(request, attempt_id):
             answer.correct_display = answer.question.answer_key.correct_answers if hasattr(question, 'answer_key') else '—'
             answer.student_display = answer.text_answer or '(no answer)'
 
-    return render(request, 'exams/view_student_attempt.html', {'attempt': attempt, 'answers': answers})
+    return render(request, 'exams/view_student_attempt.html', {
+        'exam': attempt.exam, 'attempt': attempt, 'answers': answers,
+    })
 
 
 @instructor_required
@@ -1013,7 +1024,7 @@ def reopen_attempt(request, attempt_id):
             f"{attempt.student.get_full_name()}'s attempt has been reopened - "
             f"they can log back in and continue where they left off."
         )
-    return redirect('exams:exam_results', exam_id=attempt.exam_id)
+    return redirect(reverse('exams:exam_results', args=[attempt.exam_id]) + '?status=in_progress')
 
 
 @instructor_required
@@ -1034,7 +1045,7 @@ def grant_extra_time(request, attempt_id):
             )
         else:
             messages.error(request, "Enter a valid whole number of minutes.")
-    return redirect('exams:exam_results', exam_id=attempt.exam_id)
+    return redirect(reverse('exams:exam_results', args=[attempt.exam_id]) + '?status=in_progress')
 
 
 @instructor_required
@@ -1064,5 +1075,5 @@ def delete_in_progress_attempt(request, attempt_id):
             request,
             f"Deleted {student_name}'s in-progress attempt. They can start a fresh attempt if they access this exam again."
         )
-        return redirect('exams:exam_results', exam_id=exam_id)
-    return redirect('exams:exam_results', exam_id=attempt.exam_id)
+        return redirect(reverse('exams:exam_results', args=[exam_id]) + '?status=in_progress')
+    return redirect(reverse('exams:exam_results', args=[attempt.exam_id]) + '?status=in_progress')

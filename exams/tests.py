@@ -326,7 +326,7 @@ class ExamResultNameFilterTests(TestCase):
         self.assertContains(response, 'not submitted')
         attempt.refresh_from_db()
         self.assertFalse(attempt.is_submitted)
-        self.assertContains(self.client.get(reverse('exams:exam_results', args=[self.exam.pk])), 'View saved answers')
+        self.assertContains(self.client.get(reverse('exams:exam_results', args=[self.exam.pk]), {'status': 'in_progress'}), 'View saved answers')
 
     def test_other_instructor_cannot_review_saved_work(self):
         other = get_user_model().objects.create_user(username='other-reviewer', role='instructor')
@@ -349,22 +349,57 @@ class ExamResultNameFilterTests(TestCase):
         self.assertContains(response, 'Maria Elena Dela Cruz')
         self.assertNotContains(response, 'Mario Santos')
 
-    def test_results_can_show_one_section_across_attempt_statuses(self):
-        response = self.client.get(
-            reverse('exams:exam_results', args=[self.exam.id]),
-            {'section': 'B'},
-        )
+    def test_results_separate_submitted_and_in_progress_with_filters(self):
+        url = reverse('exams:exam_results', args=[self.exam.id])
+        submitted = self.client.get(url, {'section': 'B'})
+        self.assertEqual([a.student for a in submitted.context['attempts']], [self.maria_cruz])
+        self.assertEqual(submitted.context['in_progress_attempts'], [])
+        self.assertContains(submitted, 'Maria Elena Dela Cruz')
+        self.assertNotContains(submitted, 'Maria Santos')
+        self.assertNotContains(submitted, 'View saved answers')
+        progress = self.client.get(url, {'status': 'in_progress', 'section': 'B'})
+        self.assertEqual(progress.context['attempts'], [])
+        self.assertEqual([a.student for a in progress.context['in_progress_attempts']], [self.maria_santos])
+        self.assertContains(progress, 'Maria Santos')
+        self.assertNotContains(progress, 'Maria Elena Dela Cruz')
+        self.assertContains(progress, 'name="status" value="in_progress"')
+        self.assertContains(progress, 'status=in_progress&amp;section=B')
+        self.assertContains(progress, 'View saved answers')
+        self.assertNotContains(progress, 'Download CSV')
 
-        self.assertEqual(
-            [attempt.student for attempt in response.context['attempts']],
-            [self.maria_cruz],
-        )
-        self.assertEqual(
-            [attempt.student for attempt in response.context['in_progress_attempts']],
-            [self.maria_santos],
-        )
-        self.assertContains(response, 'Section B')
-        self.assertNotContains(response, 'Mario Santos')
+    def test_invalid_result_status_defaults_to_submitted(self):
+        response = self.client.get(reverse('exams:exam_results', args=[self.exam.pk]), {'status': 'invalid'})
+        self.assertEqual(response.context['result_status'], 'submitted')
+        self.assertEqual(len(response.context['attempts']), 2)
+        self.assertEqual(response.context['in_progress_attempts'], [])
+
+    def test_attempt_actions_return_to_in_progress_panel(self):
+        active = ExamAttempt.objects.get(student=self.maria_santos, exam=self.exam)
+        response = self.client.post(reverse('exams:grant_extra_time', args=[active.pk]), {'extra_minutes': '5'})
+        expected_url = reverse('exams:exam_results', args=[self.exam.pk]) + '?status=in_progress'
+        self.assertRedirects(response, expected_url)
+        submitted = ExamAttempt.objects.get(student=self.maria_cruz, exam=self.exam)
+        response = self.client.post(reverse('exams:reopen_attempt', args=[submitted.pk]))
+        self.assertRedirects(response, expected_url)
+
+    def test_access_actions_return_to_access_panel(self):
+        response = self.client.post(reverse('exams:exam_access_control', args=[self.exam.pk]), {'action': 'enable'})
+        self.assertRedirects(response, reverse('exams:exam_detail', args=[self.exam.pk]) + '?panel=access')
+
+    def test_exam_panels_show_only_the_selected_module(self):
+        Question.objects.create(exam=self.exam, question_type=Question.IDENT, question_text='Panel-specific question')
+        url = reverse('exams:exam_detail', args=[self.exam.pk])
+        overview = self.client.get(url)
+        self.assertContains(overview, 'workspace-sidebar')
+        self.assertContains(overview, 'Manage assessment')
+        self.assertNotContains(overview, 'Panel-specific question')
+        questions = self.client.get(url, {'panel': 'questions'})
+        self.assertContains(questions, 'Panel-specific question')
+        self.assertNotContains(questions, 'Manage assessment')
+        self.assertNotContains(questions, 'Enable and generate code')
+        access = self.client.get(url, {'panel': 'access'})
+        self.assertContains(access, 'Enable and generate code')
+        self.assertNotContains(access, 'Panel-specific question')
 
     def test_results_can_reverse_last_name_order(self):
         response = self.client.get(
@@ -471,7 +506,7 @@ class ImageIdentificationEditorTests(TestCase):
             reverse('exams:question_create', args=[self.exam.id]), data=data
         )
 
-        self.assertRedirects(response, reverse('exams:exam_detail', args=[self.exam.id]))
+        self.assertRedirects(response, reverse('exams:exam_detail', args=[self.exam.id]) + '?panel=questions')
         question = Question.objects.get(exam=self.exam)
         self.assertEqual(question.points, 5)
         self.assertRegex(question.image.name, r'^exam_images/\d+/[0-9a-f]{32}\.png$')

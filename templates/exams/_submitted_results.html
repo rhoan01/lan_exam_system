@@ -1,0 +1,34 @@
+<section class="card">
+  <div class="card-header"><div><span class="eyebrow">Completed attempts</span><h2>Submitted results</h2><p>Review scores, answer details, and recorded tab switches by section.</p></div></div>
+  {% if grouped_attempts %}
+    {% for section, attempts in grouped_attempts %}
+      <div class="section-label">Section {{ section }} · {{ attempts|length }} student{{ attempts|length|pluralize }}</div>
+      <div class="table-wrap" style="margin-bottom:20px;">
+        <table>
+          <thead><tr><th>Student <span class="sort-hint">{% if name_order == 'desc' %}Z–A{% else %}A–Z{% endif %}</span></th><th>ID number</th><th>Program / year</th><th>Score</th><th>Result</th><th>Tab switches</th><th>Submitted</th><th>Actions</th></tr></thead>
+          <tbody>
+          {% for attempt in attempts %}
+            <tr>
+              <td><strong>{{ attempt.student.get_full_name }}</strong></td>
+              <td>{{ attempt.student.student_profile.id_number }}</td>
+              <td>{{ attempt.student.student_profile.program }} / {{ attempt.student.student_profile.year_level }}</td>
+              <td>{{ attempt.score|floatformat:0 }} / {{ attempt.total_points|floatformat:0 }}</td>
+              <td><span class="badge {% if attempt.percentage >= 75 %}badge-published{% else %}badge-warning{% endif %}">{{ attempt.percentage }}%</span></td>
+              <td>{% if attempt.tab_switch_count %}<span class="badge badge-draft">{{ attempt.tab_switch_count }}</span>{% else %}<span class="muted">0</span>{% endif %}</td>
+              <td style="white-space:nowrap;">{{ attempt.submitted_at|date:"M d, Y H:i" }}</td>
+              <td>
+                <div class="inline-actions" style="min-width:250px;">
+                  <a href="{% url 'exams:view_student_attempt' attempt.id %}" class="btn btn-sm btn-secondary">View answers</a>
+                  <form method="post" action="{% url 'exams:reopen_attempt' attempt.id %}" onsubmit="return confirm('Reopen this attempt? The score will be cleared until the student resubmits.');" class="inline-actions" style="flex-wrap:nowrap;">{% csrf_token %}<input type="number" name="extra_minutes" min="0" placeholder="+ min" style="width:68px; min-height:33px;" title="Optional extra minutes"><button type="submit" class="btn btn-sm btn-warn">Reopen</button></form>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty-state"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M4 19V9M10 19V5M16 19v-7M3 19h18"/></svg></div><h3>{% if has_active_filters %}No matching submissions{% else %}No submissions yet{% endif %}</h3><p>{% if has_active_filters %}Adjust or reset the view controls to see other students.{% else %}Completed attempts will appear here as students submit the exam.{% endif %}</p></div>
+  {% endif %}
+</section>

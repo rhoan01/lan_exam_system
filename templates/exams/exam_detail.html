@@ -24,6 +24,7 @@
   </div>
 </section>
 
+{% if exam_panel == 'overview' %}
 {% if not exam.available_to_all_programs and not exam.target_programs.exists %}
   <div class="notice notice-danger" style="margin-bottom:20px;">
     <strong>Program assignment required.</strong>
@@ -37,6 +38,18 @@
   <div class="stat-card"><div class="stat-label">Duration</div><span class="stat-value">{{ exam.time_limit_minutes }}<small style="font-size:.8rem; font-weight:650; letter-spacing:0;"> min</small></span></div>
 </div>
 
+<section class="card">
+  <div class="card-header">
+    <div><span class="eyebrow">Exam controls</span><h2>Manage assessment</h2><p>Publish the assessment when its settings and questions are ready.</p></div>
+  </div>
+  <div class="card-actions">
+    <form method="post" action="{% url 'exams:exam_toggle_publish' exam.id %}">{% csrf_token %}<button type="submit" class="btn {% if exam.is_published %}btn-warn{% else %}btn-accent{% endif %}">{% if exam.is_published %}Unpublish{% else %}Publish exam{% endif %}</button></form>
+    <form method="post" action="{% url 'exams:exam_delete' exam.id %}" onsubmit="return confirm('Permanently delete this exam, all its questions, and all student results for it? This cannot be undone.');">{% csrf_token %}<button type="submit" class="btn btn-danger">Delete</button></form>
+  </div>
+</section>
+
+<section class="card"><div class="card-header"><div><span class="eyebrow">Exam overview</span><h2>Instructions</h2></div></div><p>{{ exam.instructions|default:"No exam instructions added yet."|linebreaksbr }}</p><p class="helptext">Identification: {% if exam.identification_strict %}Strict (case-sensitive){% else %}Non-strict (case-insensitive){% endif %}</p></section>
+{% elif exam_panel == 'access' %}
 <div class="notice {% if exam.access_code_enabled %}notice-warning{% else %}notice-danger{% endif %}" style="margin-bottom:20px;">
   {% if exam.access_code_enabled and exam.access_code %}
     <strong>Student access enabled</strong><span class="access-code">{{ exam.access_code }}</span>
@@ -52,24 +65,11 @@
   {% endif %}
 </div>
 
-<section class="card">
-  <div class="card-header">
-    <div><span class="eyebrow">Exam controls</span><h2>Manage assessment</h2><p>Build the question set, configure delivery, or review submissions.</p></div>
-  </div>
-  <div class="card-actions">
-    <a class="btn btn-accent" href="{% url 'exams:question_create' exam.id %}"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14"/></svg>Add question</a>
-    <a class="btn btn-secondary" href="{% url 'exams:bulk_import_questions' exam.id %}">Bulk import</a>
-    <a class="btn btn-secondary" href="{% url 'exams:exam_edit' exam.id %}">Exam settings</a>
-    <a class="btn btn-secondary" href="{% url 'exams:exam_results' exam.id %}">View results</a>
-    <form method="post" action="{% url 'exams:exam_toggle_publish' exam.id %}">{% csrf_token %}<button type="submit" class="btn {% if exam.is_published %}btn-warn{% else %}btn-accent{% endif %}">{% if exam.is_published %}Unpublish{% else %}Publish exam{% endif %}</button></form>
-    <form method="post" action="{% url 'exams:exam_delete' exam.id %}" onsubmit="return confirm('Permanently delete this exam, all its questions, and all student results for it? This cannot be undone.');">{% csrf_token %}<button type="submit" class="btn btn-danger">Delete</button></form>
-  </div>
-</section>
-
+{% elif exam_panel == 'questions' %}
 <section class="card">
   <div class="card-header">
     <div><span class="eyebrow">Question bank</span><h2>Questions</h2><p>Questions appear in the configured order unless shuffling is enabled.</p></div>
-    <span class="badge badge-neutral">{{ questions|length }} item{{ questions|length|pluralize }}</span>
+    <div class="inline-actions"><a class="btn btn-accent btn-sm" href="{% url 'exams:question_create' exam.id %}">Add question</a><a class="btn btn-secondary btn-sm" href="{% url 'exams:bulk_import_questions' exam.id %}">Bulk import</a><span class="badge badge-neutral">{{ questions|length }} item{{ questions|length|pluralize }}</span></div>
   </div>
   {% if questions %}
     <div class="table-wrap responsive-table">
@@ -82,22 +82,6 @@
             <td data-label="Type"><span class="qtype-tag">{{ q.get_question_type_display }}</span></td>
             <td data-label="Question">
               {{ q.question_text|truncatechars:82 }}
-              {% if q.question_type == 'PMCQ' %}
-                <div class="code-editor compact-code-editor">
-                  <div class="code-titlebar"><span>{{ q.code_language|default:"Code" }}</span><span>Teacher preview</span></div>
-                  <ol class="code-lines">{% for line in q.code_lines %}<li><code>{{ line|default:" " }}</code></li>{% endfor %}</ol>
-                </div>
-                <div class="teacher-choice-list">
-                  {% for choice in q.choices.all %}
-                    <div class="teacher-choice{% if choice.is_correct %} is-correct{% endif %}">
-                      {{ choice.choice_text }}{% if choice.is_correct %}<span>Correct</span>{% endif %}
-                    </div>
-                  {% endfor %}
-                </div>
-              {% elif q.question_type == 'image_identification' %}
-                {% if q.image %}<img src="{{ q.image.url }}" alt="Numbered identification image" class="question-image teacher-image-preview">{% endif %}
-                <div class="helptext">{{ q.image_identification_items.count }} numbered label{{ q.image_identification_items.count|pluralize }}</div>
-              {% endif %}
             </td>
             <td data-label="Points">{{ q.points }}</td>
             <td data-label="">
@@ -120,4 +104,5 @@
     </div>
   {% endif %}
 </section>
+{% endif %}
 {% endblock %}
