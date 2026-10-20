@@ -107,14 +107,10 @@ another. Django/SQLite will retry briefly on a locked database, but
 under sustained concurrent writes this shows up as slow submissions or
 occasional "database is locked" errors.
 
-**Recommendation:** for the actual exam day with hundreds of concurrent
-students, **use MySQL or MariaDB**. It supports many concurrent writers
-without this bottleneck. For development, testing, or a much smaller
-class size, SQLite (the default) is fine and requires no extra setup.
-
-This project does **not** hard-code either choice — it switches based
-on the `DB_ENGINE` environment variable, so you can develop on SQLite
-and only switch to MySQL for exam day itself, without touching code.
+**MySQL is required for all startup paths, including development and tests.**
+SQLite is disabled. Missing credentials cause a configuration error; failed
+MySQL connections never fall back to a local database. For direct commands
+in Command Prompt, first run `call deployment\mysql.local.bat`.
 
 ### Setting up MySQL/MariaDB
 
@@ -148,27 +144,14 @@ and only switch to MySQL for exam day itself, without touching code.
    DB_PORT=3306
    ```
 
-### If you already have existing data in SQLite and want to move to MySQL
+### Existing SQLite data
 
-Your existing student accounts, subjects, exams, questions, and results
-in `db.sqlite3` are **not lost** by switching `DB_ENGINE` — they simply
-won't appear in the new MySQL database until migrated across. To
-migrate the data itself (not just the schema):
-
-```cmd
-REM 1. While still pointed at SQLite (DB_ENGINE unset/sqlite), back up your data:
-python manage.py backup_data
-
-REM 2. Switch environment variables to MySQL (see above), then create the schema:
-python manage.py migrate
-
-REM 3. Load your previously backed-up data into the new MySQL database:
-python manage.py loaddata backups\exam_backup_<timestamp>.json
-```
-
-This preserves all existing student accounts, instructor accounts,
-subjects, exams, questions, attempts, and results — nothing is deleted
-or overwritten automatically.
+The old `db.sqlite3` file is left untouched and is never opened by the
+application. Existing data in that file requires a separate, explicit data
+migration; it is not automatically copied to MySQL. Use a previously exported
+JSON backup with `python manage.py loaddata` after loading the MySQL
+configuration. The application no longer supports running against SQLite
+to create exports.
 
 ## 6. Django settings for LAN deployment
 

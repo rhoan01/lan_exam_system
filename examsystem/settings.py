@@ -8,7 +8,7 @@ Two deployment modes are supported, controlled entirely by environment
 variables (nothing below needs to be hand-edited for a normal deployment):
 
   DEVELOPMENT (default, if no environment variables are set):
-    - SQLite database (db.sqlite3)
+    - MySQL database (credentials required)
     - DEBUG = True
     - `python manage.py runserver`
 
@@ -23,7 +23,7 @@ Environment variables recognized (all optional; sensible dev defaults if unset):
     DJANGO_DEBUG             - "True" / "False" (default: True)
     DJANGO_ALLOWED_HOSTS     - comma-separated hosts/IPs, e.g. "192.168.1.10,examserver"
     DJANGO_CSRF_TRUSTED_ORIGINS - comma-separated origins, e.g. "http://192.168.1.10:8000"
-    DB_ENGINE                - "sqlite" (default) or "mysql"
+    DB_ENGINE                - "mysql" only (default); other engines are rejected
     DB_NAME                  - database name (mysql only; default "examsystem")
     DB_USER                  - database user (mysql only)
     DB_PASSWORD              - database password (mysql only)
@@ -129,58 +129,46 @@ WSGI_APPLICATION = 'examsystem.wsgi.application'
 # ----------------------------------------------------------------------
 # Database
 # ----------------------------------------------------------------------
-# DB_ENGINE=sqlite (default) -> single-file SQLite database, fine for
-#     development, testing, and small trial runs.
-# DB_ENGINE=mysql -> MySQL / MariaDB, recommended for the actual
-#     examination day with hundreds of concurrent students (see
-#     deployment/README_DEPLOYMENT.md for why, and for setup steps).
-DB_ENGINE = os.environ.get('DB_ENGINE', 'sqlite').strip().lower()
-
-if DB_ENGINE not in {'sqlite', 'mysql'}:
+# MySQL is required for every startup path, including direct manage.py use.
+# Missing credentials or an unavailable MySQL server must never select SQLite.
+DB_ENGINE = os.environ.get('DB_ENGINE', 'mysql').strip().lower()
+if DB_ENGINE != 'mysql':
     raise ImproperlyConfigured(
-        'DB_ENGINE must be either "sqlite" or "mysql"; '
-        f'received {DB_ENGINE!r}.'
+        'This application requires MySQL; DB_ENGINE must be "mysql". '
+        'SQLite is disabled. Load deployment\\mysql.local.bat before running Django commands.'
     )
 
-if DB_ENGINE == 'mysql':
-    # PyMySQL is a pure-Python MySQL driver: no C build tools needed on
-    # Windows Server, unlike mysqlclient. It's registered here to act as
-    # a drop-in replacement for MySQLdb, which Django's mysql backend expects.
-    import pymysql
-    pymysql.install_as_MySQLdb()
+# PyMySQL is a pure-Python MySQL driver: no C build tools needed on
+# Windows Server, unlike mysqlclient. It's registered here to act as
+# a drop-in replacement for MySQLdb, which Django's mysql backend expects.
+import pymysql
+pymysql.install_as_MySQLdb()
 
-    db_password = os.environ.get('DB_PASSWORD', '')
-    if not db_password:
-        raise ImproperlyConfigured(
-            'DB_PASSWORD must be set when DB_ENGINE=mysql.'
-        )
+db_password = os.environ.get('DB_PASSWORD', '')
+if not db_password:
+    raise ImproperlyConfigured(
+        'DB_PASSWORD is required. Load deployment\\mysql.local.bat before running Django commands.'
+    )
 
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.mysql',
-            'NAME': os.environ.get('DB_NAME', 'examsystem'),
-            'USER': os.environ.get('DB_USER', 'examsystem_user'),
-            'PASSWORD': db_password,
-            'HOST': os.environ.get('DB_HOST', '127.0.0.1'),
-            'PORT': os.environ.get('DB_PORT', '3306'),
-            'OPTIONS': {
-                'charset': 'utf8mb4',
-                'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
-            },
-            # Waitress owns a bounded thread pool, so at most one persistent
-            # database connection per active worker thread is needed. Reusing
-            # these connections avoids setup overhead during autosave bursts.
-            'CONN_MAX_AGE': 60,
-            'CONN_HEALTH_CHECKS': True,
-        }
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': os.environ.get('DB_NAME', 'examsystem'),
+        'USER': os.environ.get('DB_USER', 'examsystem_user'),
+        'PASSWORD': db_password,
+        'HOST': os.environ.get('DB_HOST', '127.0.0.1'),
+        'PORT': os.environ.get('DB_PORT', '3306'),
+        'OPTIONS': {
+            'charset': 'utf8mb4',
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+        },
+        # Waitress owns a bounded thread pool, so at most one persistent
+        # database connection per active worker thread is needed. Reusing
+        # these connections avoids setup overhead during autosave bursts.
+        'CONN_MAX_AGE': 60,
+        'CONN_HEALTH_CHECKS': True,
     }
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
+}
 
 AUTH_USER_MODEL = 'accounts.User'
 

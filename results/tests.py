@@ -8,7 +8,7 @@ from django.test.client import RequestFactory
 from django.urls import reverse
 
 from accounts.models import Program, StudentProfile
-from exams.models import Choice, Exam, ImageIdentificationItem, Question, Subject
+from exams.models import AnswerKey, Choice, Exam, ImageIdentificationItem, Question, Subject
 from .grading import grade_answer, matches_accepted_answer, normalize_answer
 from .models import ExamAccessGrant
 
@@ -69,6 +69,25 @@ class ProgrammingMultipleChoiceGradingTests(SimpleTestCase):
         self.assertNotIn('is_correct', html)
         self.assertNotIn('>Correct<', html)
         self.assertIn('class="code-lines"', html)
+
+
+class IdentificationModeTests(SimpleTestCase):
+    def test_identification_modes_preserve_whitespace_and_alternate_answers(self):
+        exam = Exam(identification_strict=True)
+        question = Question(exam=exam, question_type=Question.IDENT, points=2)
+        question.answer_key = AnswerKey(correct_answers='CPU SOCKET\nProcessor Socket')
+        for submitted, expected in [('CPU SOCKET', 2), ('cpu socket', 0),
+                                    ('  CPU   SOCKET ', 2), ('Processor Socket', 2),
+                                    ('PROCESSOR SOCKET', 0), ('', 0)]:
+            with self.subTest(mode='strict', submitted=submitted):
+                self.assertEqual(grade_answer(question, text_answer=submitted), (expected, False))
+        exam.identification_strict = False
+        for submitted in ['cpu socket', 'Cpu Socket', 'PROCESSOR SOCKET']:
+            with self.subTest(mode='non-strict', submitted=submitted):
+                self.assertEqual(grade_answer(question, text_answer=submitted), (2, False))
+
+    def test_existing_exams_default_to_non_strict(self):
+        self.assertFalse(Exam().identification_strict)
 
 
 class ImageIdentificationMatchingTests(SimpleTestCase):

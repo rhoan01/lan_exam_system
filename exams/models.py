@@ -65,6 +65,14 @@ class Exam(models.Model):
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='exams')
     title = models.CharField(max_length=200)
     instructions = models.TextField(blank=True)
+    identification_strict = models.BooleanField(
+        default=False,
+        verbose_name="Strict identification mode",
+        help_text=(
+            "Strict: identification answers must match the answer key's uppercase and lowercase letters. "
+            "Non-strict (unchecked): capitalization is ignored. Extra whitespace is ignored in both modes."
+        ),
+    )
     time_limit_minutes = models.PositiveIntegerField(
         default=60, help_text="Adjustable time limit for this exam, in minutes."
     )

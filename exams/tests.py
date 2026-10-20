@@ -10,7 +10,7 @@ from django.urls import reverse
 from PIL import Image
 
 from accounts.models import Program, StudentProfile
-from results.models import ExamAttempt
+from results.models import ExamAttempt, StudentAnswer
 
 from .models import (
     Exam, ImageIdentificationItem, Question, Subject, validate_question_image,
@@ -205,7 +205,7 @@ class ExamProgramAssignmentFormTests(TestCase):
             'title': 'Program-scoped exam',
             'instructions': '',
             'time_limit_minutes': '60',
-            'target_programs': [str(self.program.pk)],
+            'target_program_codes': 'BSIT',
             'target_year_levels': ['1st Year'],
             'target_sections': ['C'],
         }
@@ -213,10 +213,10 @@ class ExamProgramAssignmentFormTests(TestCase):
         return data
 
     def test_requires_program_assignment_or_explicit_all_programs(self):
-        form = ExamForm(data=self.form_data(target_programs=[]))
+        form = ExamForm(data=self.form_data(target_program_codes=''))
 
         self.assertFalse(form.is_valid())
-        self.assertIn('target_programs', form.errors)
+        self.assertIn('target_program_codes', form.errors)
 
     def test_saves_selected_target_programs(self):
         form = ExamForm(data=self.form_data())
@@ -237,6 +237,30 @@ class ExamProgramAssignmentFormTests(TestCase):
 
         self.assertTrue(exam.available_to_all_programs)
         self.assertFalse(exam.target_programs.exists())
+
+    def test_typed_codes_are_normalized_and_new_programs_created(self):
+        form = ExamForm(data=self.form_data(target_program_codes='bsit, BSCS, bsit'))
+        self.assertTrue(form.is_valid(), form.errors)
+        form.instance.subject = self.subject
+        exam = form.save()
+        self.assertEqual(set(exam.target_programs.values_list('code', flat=True)), {'BSIT', 'BSCS'})
+
+    def test_typed_programs_support_create_view_commit_false(self):
+        form = ExamForm(data=self.form_data())
+        self.assertTrue(form.is_valid(), form.errors)
+        exam = form.save(commit=False)
+        exam.subject = self.subject
+        exam.save()
+        form.save_m2m()
+        self.assertEqual(list(exam.target_programs.all()), [self.program])
+
+    def test_edit_initializes_typed_codes_and_all_programs_clears_them(self):
+        exam = Exam.objects.create(subject=self.subject, title='Existing')
+        exam.target_programs.add(self.program)
+        self.assertEqual(ExamForm(instance=exam)['target_program_codes'].value(), 'BSIT')
+        form = ExamForm(data=self.form_data(available_to_all_programs='on', target_program_codes=''), instance=exam)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertFalse(form.save().target_programs.exists())
 
 
 class ExamResultNameFilterTests(TestCase):
@@ -281,6 +305,34 @@ class ExamResultNameFilterTests(TestCase):
             course='BSIT',
         )
         return student
+
+    def test_submitted_review_includes_saved_and_unanswered_questions(self):
+        first = Question.objects.create(exam=self.exam, question_type=Question.IDENT, question_text='Answered item', order=1)
+        Question.objects.create(exam=self.exam, question_type=Question.IDENT, question_text='Unanswered item', order=2)
+        attempt = ExamAttempt.objects.get(student=self.maria_cruz, exam=self.exam)
+        StudentAnswer.objects.create(attempt=attempt, question=first, text_answer='Saved response')
+        response = self.client.get(reverse('exams:view_student_attempt', args=[attempt.pk]))
+        self.assertContains(response, 'Saved response')
+        self.assertContains(response, 'Unanswered item')
+        self.assertContains(response, '(no answer)')
+        self.assertEqual(attempt.answers.count(), 1)
+
+    def test_in_progress_saved_work_can_be_reviewed_without_submitting(self):
+        question = Question.objects.create(exam=self.exam, question_type=Question.IDENT, question_text='Saved item')
+        attempt = ExamAttempt.objects.get(student=self.maria_santos, exam=self.exam)
+        StudentAnswer.objects.create(attempt=attempt, question=question, text_answer='Draft response')
+        response = self.client.get(reverse('exams:view_student_attempt', args=[attempt.pk]))
+        self.assertContains(response, 'Draft response')
+        self.assertContains(response, 'not submitted')
+        attempt.refresh_from_db()
+        self.assertFalse(attempt.is_submitted)
+        self.assertContains(self.client.get(reverse('exams:exam_results', args=[self.exam.pk])), 'View saved answers')
+
+    def test_other_instructor_cannot_review_saved_work(self):
+        other = get_user_model().objects.create_user(username='other-reviewer', role='instructor')
+        self.client.force_login(other)
+        attempt = ExamAttempt.objects.get(student=self.maria_santos, exam=self.exam)
+        self.assertEqual(self.client.get(reverse('exams:view_student_attempt', args=[attempt.pk])).status_code, 404)
 
     def test_results_filter_first_and_last_names_separately(self):
         response = self.client.get(

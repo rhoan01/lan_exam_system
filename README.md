@@ -123,9 +123,8 @@ Then, from any device on the same LAN, browse to:
 
 - All styling/JS is self-hosted (no external CDNs), so it works fully
   offline on a LAN.
-- SQLite is used by default (`db.sqlite3`) for development. For a busier
-  deployment, set `DB_ENGINE=mysql` and the other values documented in
-  `deployment/.env.example`; no source-code edits are required.
+- MySQL is required for development and production. Load the values in
+  `deployment/mysql.local.bat` before direct Django commands; SQLite is disabled.
 - Production secrets, `DEBUG`, allowed hosts, and the database connection are
   supplied through the ignored `deployment/mysql.local.bat` file. Start the
   production stack with `deployment/run_exam_system.bat`; it refuses to run

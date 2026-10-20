@@ -1,6 +1,5 @@
 from django import forms
 from django.forms import BaseInlineFormSet, inlineformset_factory
-from django.db.models import Q
 
 from accounts.models import Program, YEAR_LEVEL_CHOICES, SECTION_CHOICES
 from .models import (
@@ -20,6 +19,12 @@ class SubjectForm(forms.ModelForm):
 
 
 class ExamForm(forms.ModelForm):
+    target_program_codes = forms.CharField(
+        required=False,
+        label="Available to program(s)",
+        help_text="Type program codes separated by commas (e.g. BSIT, BSCS), or check Available to all programs. New codes are added to the program list.",
+        widget=forms.TextInput(attrs={'placeholder': 'e.g. BSIT, BSCS'}),
+    )
     target_year_levels = forms.MultipleChoiceField(
         choices=YEAR_LEVEL_CHOICES,
         widget=forms.CheckboxSelectMultiple,
@@ -38,14 +43,13 @@ class ExamForm(forms.ModelForm):
     class Meta:
         model = Exam
         fields = [
-            'title', 'instructions', 'time_limit_minutes',
-            'available_to_all_programs', 'target_programs',
+            'title', 'instructions', 'time_limit_minutes', 'identification_strict',
+            'available_to_all_programs', 'target_program_codes',
             'is_published', 'shuffle_questions', 'shuffle_choices',
         ]
         widgets = {
             'instructions': forms.Textarea(attrs={'rows': 3}),
             'time_limit_minutes': forms.NumberInput(attrs={'min': 1, 'max': 600}),
-            'target_programs': forms.CheckboxSelectMultiple,
         }
         help_texts = {
             'time_limit_minutes': 'Adjustable countdown timer shown to students, in minutes.',
@@ -53,14 +57,35 @@ class ExamForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        program_filter = Q(is_active=True)
         if self.instance and self.instance.pk:
-            program_filter |= Q(exams=self.instance)
             self.fields['target_year_levels'].initial = self.instance.target_year_level_list()
             self.fields['target_sections'].initial = self.instance.target_section_list()
-        self.fields['target_programs'].queryset = Program.objects.filter(
-            program_filter
-        ).distinct()
+            self.fields['target_program_codes'].initial = ', '.join(
+                self.instance.target_programs.values_list('code', flat=True)
+            )
+
+    def clean_target_program_codes(self):
+        if self.cleaned_data.get('available_to_all_programs'):
+            return []
+        codes = list(dict.fromkeys(
+            code.strip().upper()
+            for code in self.cleaned_data.get('target_program_codes', '').split(',')
+            if code.strip()
+        ))
+        if not codes:
+            raise forms.ValidationError("Type at least one program code, or choose all programs.")
+        if any(len(code) > 30 for code in codes):
+            raise forms.ValidationError("Each program code must be 30 characters or fewer.")
+        return codes
+
+    def _save_m2m(self):
+        super()._save_m2m()
+        programs = []
+        if not self.cleaned_data.get('available_to_all_programs'):
+            for code in self.cleaned_data['target_program_codes']:
+                program, _created = Program.objects.get_or_create(code=code, defaults={'name': code})
+                programs.append(program)
+        self.instance.target_programs.set(programs)
 
     def save(self, commit=True):
         exam = super().save(commit=False)
@@ -70,19 +95,6 @@ class ExamForm(forms.ModelForm):
             exam.save()
             self.save_m2m()
         return exam
-
-    def clean(self):
-        cleaned = super().clean()
-        all_programs = cleaned.get('available_to_all_programs')
-        target_programs = cleaned.get('target_programs')
-        if not all_programs and not target_programs:
-            self.add_error(
-                'target_programs',
-                "Select at least one program, or explicitly choose all programs.",
-            )
-        if all_programs:
-            cleaned['target_programs'] = []
-        return cleaned
 
 
 class QuestionForm(forms.ModelForm):

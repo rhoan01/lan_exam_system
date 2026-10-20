@@ -84,6 +84,7 @@
             <p class="helptext">List your answers, one per line (expecting about {{ q.expected_answer_count }} item{{ q.expected_answer_count|pluralize }}).</p>
             <textarea name="question_{{ q.id }}" rows="5" class="answer-input" data-qindex="{{ forloop.counter0 }}">{{ q.saved_text }}</textarea>
           {% elif q.question_type == 'IDENT' %}
+            <p class="helptext">{% if exam.identification_strict %}Strict mode: capitalization must match the answer key.{% else %}Non-strict mode: uppercase and lowercase letters are treated the same.{% endif %}</p>
             <input type="text" name="question_{{ q.id }}" class="answer-input" data-qindex="{{ forloop.counter0 }}" value="{{ q.saved_text }}">
           {% elif q.question_type == 'MATCH' %}
             <p class="helptext">Match each Column A item with its Column B answer.</p>

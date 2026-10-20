@@ -3,7 +3,7 @@ Auto-grading engine for the LAN Examination System.
 
 - Multiple Choice / Programming Multiple Choice / True-or-False: exact match
   against the choice marked correct.
-- Identification: case-insensitive / whitespace-insensitive match against
+- Identification: exam-configurable case sensitivity / whitespace-insensitive match against
   any of the accepted answers in the instructor's answer key.
 - Enumeration: the student's answer (one item per line, or comma
   separated) is compared against the answer key list. Partial credit is
@@ -26,12 +26,15 @@ def normalize_answer(text):
     return ' '.join(text.strip().lower().split())
 
 
-def matches_accepted_answer(student_answer, accepted_answers):
-    normalized_student = normalize_answer(student_answer or '')
+def matches_accepted_answer(student_answer, accepted_answers, *, case_sensitive=False):
+    def normalize(text):
+        return ' '.join(text.split()) if case_sensitive else normalize_answer(text)
+
+    normalized_student = normalize(student_answer or '')
     if not normalized_student:
         return False
     return normalized_student in {
-        normalize_answer(answer) for answer in accepted_answers if normalize_answer(answer)
+        normalize(answer) for answer in accepted_answers if normalize(answer)
     }
 
 
@@ -45,7 +48,8 @@ def grade_identification(question, text_answer):
     if not hasattr(question, 'answer_key'):
         return 0
     return question.points if matches_accepted_answer(
-        text_answer, question.answer_key.answers_list()
+        text_answer, question.answer_key.answers_list(),
+        case_sensitive=question.exam.identification_strict,
     ) else 0
 
 

@@ -6,9 +6,36 @@
 <div class="grid import-layout">
 <div class="card">
 
-  <div class="card-header"><div><span class="eyebrow">Reference</span><h2>Formatting guide</h2><p>Three import formats are supported.</p></div></div>
+  <div class="card-header"><div><span class="eyebrow">Reference</span><h2>Formatting guide</h2><p>Use the Q: plain-text format below for Multiple Choice and Programming Multiple Choice. Older formats are also supported.</p></div></div>
 
-  <p class="helptext"><strong>Format 1 (all question types):</strong> each question starts with a <code>TYPE:</code> line — <code>MCQ</code>, <code>TF</code>, <code>ENUM</code>, <code>IDENT</code>, <code>CASE</code>, or <code>MATCH</code>. For an MCQ-only file, repeated <code>TYPE: MCQ</code> and <code>POINTS: 1</code> lines may be omitted as long as every question starts with <code>Q:</code>.</p>
+  <p class="helptext"><strong>Recommended .txt format (Multiple Choice and Programming Multiple Choice):</strong> start every question with <code>Q:</code>. Use <code>A)</code>, <code>B)</code>, etc. for consecutive choices and end exactly one correct choice with <code>*</code>.</p>
+  <pre>
+TYPE: MCQ
+Q: Which loop repeats while a condition is True?
+POINTS: 1
+A) for
+B) while *
+C) if
+D) def
+
+Q: What is the output of this code?
+
+for i in range(3):
+    print("Welcome to Python!")
+
+A) Printed 1 time
+B) Printed 2 times
+C) Printed 3 times *
+D) Printed 4 times
+  </pre>
+  <ul class="helptext">
+    <li>Regular and programming questions can be mixed in the same MCQ file.</li>
+    <li><code>TYPE: MCQ</code> and <code>POINTS: 1</code> are optional. Each question defaults to 1 point; use <code>POINTS:</code> for a different value.</li>
+    <li>For programming questions, put the code between the question and choices. Preserve indentation and blank lines. Code is detected automatically and displayed in a code box.</li>
+    <li>Save as a UTF-8 <code>.txt</code> file or paste the same text into the import box.</li>
+  </ul>
+
+  <p class="helptext"><strong>Other question types (TYPE format):</strong> each question starts with a <code>TYPE:</code> line — <code>MCQ</code>, <code>TF</code>, <code>ENUM</code>, <code>IDENT</code>, <code>CASE</code>, or <code>MATCH</code>. For an MCQ-only file, repeated <code>TYPE: MCQ</code> and <code>POINTS: 1</code> lines may be omitted as long as every question starts with <code>Q:</code>.</p>
   <pre>
 TYPE: MCQ
 Q: What is the capital of France?
@@ -49,11 +76,12 @@ DISTRACTOR: Network as a Service
     <li><strong>POINTS:</strong> optional, defaults to 1.</li>
     <li><strong>Multiple Choice:</strong> mark the correct choice by ending its line with <code>*</code>. Questions written with <code>Q:</code>, an indented code block, and lettered choices use the boxed Programming Multiple Choice display while retaining normal multiple-choice grading.</li>
     <li><strong>True/False:</strong> just add an <code>ANSWER: True</code> or <code>ANSWER: False</code> line.</li>
+    <li><strong>Identification mode:</strong> choose Strict or Non-strict in exam settings. This applies to all Identification questions, including bulk imports. Strict requires matching capitalization; Non-strict ignores it.</li>
     <li><strong>Enumeration / Identification / Case Analysis:</strong> list accepted answers or keywords with <code>KEY:</code>, one per line.</li>
     <li><strong>Matching Type:</strong> list each Column A/B pair with <code>PAIR: left = right</code> (needs at least 2), plus optional <code>DISTRACTOR: text</code> lines for extra Column B options with no correct match. Column B is shown to students in random order.</li>
   </ul>
 
-  <p class="helptext" style="margin-top:18px;"><strong>Format 2 (quick Multiple Choice only):</strong> no <code>TYPE:</code> line needed — just the question, lettered choices, and an answer line.</p>
+  <p class="helptext" style="margin-top:18px;"><strong>Legacy quick Multiple Choice format:</strong> no <code>TYPE:</code> line needed — just the question, lettered choices, and an answer line.</p>
   <pre>
 What is Google Sheets mainly used for?
 A. Video editing
@@ -65,10 +93,10 @@ Answer Key: B
   <ul class="helptext" style="margin-top:-6px;">
     <li>Choice lines can use "A." or "A)".</li>
     <li>The answer line can say "Answer Key: B", "Answer: B", or "Ans: B".</li>
-    <li>Every Format 2 question is worth 1 point.</li>
+    <li>Every quick-format question is worth 1 point.</li>
   </ul>
 
-  <p class="helptext" style="margin-top:18px;"><strong>Format 3 (Programming Multiple Choice):</strong> number each question and separate the question text, code, and choices with blank lines. Mark exactly one trailing choice with <code>*</code>.</p>
+  <p class="helptext" style="margin-top:18px;"><strong>Legacy numbered Programming Multiple Choice format:</strong> number each question and separate the question text, code, and choices with blank lines. Mark exactly one trailing choice with <code>*</code>.</p>
   <pre>
 1. Analyze the output of the code.
 
@@ -87,7 +115,7 @@ D. Hello World! 15 *
     <li>Start each following question with a numbered line such as <code>2.</code> after the previous choices.</li>
   </ul>
 
-  <p class="helptext">For Formats 1 and 2, leave a blank line between questions. Keep Programming Multiple Choice questions together in their own import. Image Identification is created in the question editor because its image cannot be included in a text import.</p>
+  <p class="helptext">Leave a blank line between questions. For the legacy numbered programming format, keep those questions in a separate import. Image Identification is created in the question editor because its image cannot be included in a text import.</p>
 
 </div>
 <div class="card">

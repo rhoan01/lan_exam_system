@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from accounts.decorators import instructor_required
 from accounts.models import SECTION_CHOICES
-from results.models import ExamAccessGrant, ExamAttempt
+from results.models import ExamAccessGrant, ExamAttempt, StudentAnswer
 from results.grading import (
     image_identification_results, parse_image_identification_answer,
     parse_matching_answer,
@@ -732,18 +732,26 @@ def exam_results(request, exam_id):
 
 @instructor_required
 def view_student_attempt(request, attempt_id):
-    """Shows the instructor exactly what a specific student answered on a
-    submitted exam, question by question, alongside the correct answer/key
-    for reference."""
+    """Review saved work, including unfinished attempts and unanswered items."""
     attempt = get_object_or_404(
-        ExamAttempt, id=attempt_id, exam__subject__instructor=request.user, is_submitted=True
+        ExamAttempt.objects.select_related('exam__subject', 'student__student_profile__program'),
+        id=attempt_id, exam__subject__instructor=request.user,
     )
-    answers = attempt.answers.select_related(
-        'question', 'selected_choice'
-    ).prefetch_related(
-        'question__choices', 'question__matching_pairs',
-        'question__image_identification_items',
-    ).order_by('question__order')
+    saved_answers = {
+        answer.question_id: answer
+        for answer in attempt.answers.select_related('selected_choice')
+    }
+    questions = attempt.exam.questions.select_related('answer_key').prefetch_related(
+        'choices', 'matching_pairs', 'image_identification_items',
+    ).order_by('order', 'pk')
+    answers = []
+    for question in questions:
+        answer = saved_answers.get(question.pk)
+        if answer is None:
+            answer = StudentAnswer(attempt=attempt, question=question)
+        else:
+            answer.question = question
+        answers.append(answer)
 
     for answer in answers:
         question = answer.question
